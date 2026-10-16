@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { Game } from '../core/game';
 import { textures } from '../core/textures';
+import { lambert } from '../core/ps1';
 
 export type EntityPhase = 1 | 2 | 3 | 4;
 export type EntityMode = 'dormant' | 'lurk' | 'hunt' | 'lunge' | 'caught';
@@ -38,6 +39,7 @@ const HUNT_MEMORY = 2.5; // seconds it keeps hunting after the last noise
 const LUNGE_TIME = 1.4;
 const GUST_COST = 10; // fuel ripped away by its shriek
 const DRIFT_SPEED = 0.35; // rad/s it circles to stay behind the player
+const THROW_INTERVAL: [number, number] = [14, 28]; // phase 2+: seconds between hurled junk
 
 interface Puff {
   sprite: THREE.Sprite;
@@ -70,6 +72,7 @@ export class Chronophage {
   private angle = 0;
   private huntTimer = 0;
   private lungeTimer = 0;
+  private throwTimer = THROW_INTERVAL[0];
   private body = new THREE.Group();
   private puffs: Puff[] = [];
   private eyeMaterial: THREE.SpriteMaterial;
@@ -141,8 +144,14 @@ export class Chronophage {
     this.rage = 0;
     this.huntTimer = 0;
     this.lungeTimer = 0;
+    this.throwTimer = THROW_INTERVAL[0];
     this.smothering = false;
     if (this.mode !== 'dormant') this.mode = 'lurk';
+  }
+
+  /** Something loud happened — it comes looking. */
+  alert(): void {
+    if (this.mode === 'lurk' || this.mode === 'hunt') this.huntTimer = HUNT_MEMORY * 1.6;
   }
 
   update(dt: number, t: number): void {
@@ -191,6 +200,15 @@ export class Chronophage {
     this.distance += THREE.MathUtils.clamp(this.desired - this.distance, -approach * dt, RETREAT_SPEED * dt);
     this.distance = Math.max(this.distance, MIN_DISTANCE);
 
+    // From phase 2 it hurls loose metal out of the dark to rattle you.
+    if (this.phase >= 2 && this.mode !== 'lunge') {
+      this.throwTimer -= dt;
+      if (this.throwTimer <= 0) {
+        this.throwJunk();
+        this.throwTimer = THREE.MathUtils.randFloat(...THROW_INTERVAL);
+      }
+    }
+
     // Unseen, it circles round to stay behind you.
     if (!this.exposed && this.mode !== 'lunge') this.angle = rotateToward(this.angle, this.behindAngle(), DRIFT_SPEED * dt);
 
@@ -213,6 +231,32 @@ export class Chronophage {
     this.game.torch.spend(GUST_COST);
     this.game.player.shake = 0.09;
     this.game.events.emit('lunge');
+  }
+
+  /** A wrench drops out of the dark on its side of you and clatters on the floor. */
+  private throwJunk(): void {
+    const { player, world, tweens, events, embers } = this.game;
+    const angle = this.angle + (Math.random() - 0.5) * 1.2;
+    const dist = 1.8 + Math.random() * 2;
+    const target = new THREE.Vector3(player.feet.x + Math.cos(angle) * dist, 0.02, player.feet.z + Math.sin(angle) * dist);
+    const junk = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.04, 0.45), lambert({ map: textures.iron(), color: 0x9a948c }));
+    junk.position.set(target.x, 3.4, target.z);
+    junk.castShadow = true;
+    junk.userData.noHit = true;
+    world.add(junk);
+    const spin = Math.random() * Math.PI;
+    tweens.add(
+      0.55,
+      (k) => {
+        junk.position.y = 3.4 + (target.y - 3.4) * k * k;
+        junk.rotation.set(k * 7, spin + k * 3, 0);
+      },
+      () => {
+        junk.rotation.set(0, spin, 0);
+        events.emit('clank', target);
+        embers.emit(target, 10, 0.1, 1.6);
+      },
+    );
   }
 
   private place(): void {

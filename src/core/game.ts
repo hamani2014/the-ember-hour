@@ -13,6 +13,7 @@ import { Torch } from '../player/torch';
 import { Chronophage } from '../entity/chronophage';
 import { GameAudio } from '../audio/audio';
 import { Events, type GameEvents } from './events';
+import { LEVELS, type LevelId } from '../levels';
 
 /** Fuel the torch is topped up to after being caught. */
 const RESPAWN_FUEL = 50;
@@ -38,6 +39,10 @@ export class Game {
   readonly events = new Events<GameEvents>();
   /** Where the player wakes up after the shadow takes them. Levels move this forward. */
   checkpoint = { x: 0, z: 0, yaw: 0 };
+  level: LevelId | null = null;
+  /** One-off story/hint flags that persist across levels (e.g. "already showed the steam hint"). */
+  readonly flags = new Set<string>();
+  private pendingLevel: LevelId | null = null;
   private updaters: UpdateFn[] = [];
 
   constructor(container: HTMLElement, hudRoot: HTMLElement) {
@@ -62,6 +67,22 @@ export class Game {
     this.inventory.onChange = () => this.hud.setHeld(this.inventory.clues.map((c) => c.name));
     this.entity = new Chronophage(this);
     this.audio = new GameAudio(this);
+  }
+
+  /** Switch level at the start of the next frame. Clues in the inventory and torch fuel carry over. */
+  loadLevel(id: LevelId): void {
+    this.pendingLevel = id;
+  }
+
+  private applyLevel(id: LevelId): void {
+    this.world.clear();
+    this.collision.clear();
+    this.updaters.length = 0;
+    this.tweens.clear();
+    this.entity.deactivate();
+    this.hud.setPrompt(null);
+    this.level = id;
+    LEVELS[id](this);
   }
 
   setCheckpoint(x: number, z: number, yaw: number): void {
@@ -90,6 +111,11 @@ export class Game {
 
   start(): void {
     startLoop((dt, t) => {
+      if (this.pendingLevel) {
+        const id = this.pendingLevel;
+        this.pendingLevel = null;
+        this.applyLevel(id);
+      }
       const playing = this.input.locked;
       this.hud.setPaused(!playing);
       this.audio.setRunning(playing);

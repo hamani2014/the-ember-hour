@@ -5,6 +5,7 @@ import { flyerTexture, textures } from '../core/textures';
 import { createBurnPoint } from '../systems/burnPoint';
 import { createBoardedDoor } from '../systems/door';
 import { createClue, createFuel } from '../systems/pickups';
+import { createRift, timeTravel } from '../systems/rift';
 import { box, plane } from './builder';
 
 /**
@@ -25,7 +26,9 @@ export function buildAct1Lobby(game: Game): void {
   const cork = lambert({ map: textures.cork() });
   const paper = lambert({ map: textures.paper(), side: THREE.DoubleSide });
 
-  game.scene.add(new THREE.AmbientLight(0x1c1626, 0.5));
+  game.world.add(new THREE.AmbientLight(0x1c1626, 0.5));
+  game.scene.fog = new THREE.Fog(0x040302, 1, 15);
+  game.audio.setAmbience('ambience');
 
   // --- Lobby shell ---
   box(game, { pos: [0, -0.1, 0], size: [12 + 2 * T, 0.2, 10 + 2 * T], material: floor, tile: 2 });
@@ -128,24 +131,28 @@ export function buildAct1Lobby(game: Game): void {
   };
   scrap(-4.6, 3.6, 0.3);
   scrap(4.8, -4.2, 1.1);
-  scrap(0.3, -11.5, 0.5);
+  scrap(0.6, -9.5, 0.5);
+
+  // --- Story beats & triggers ---
+  // --- Temporal rift at the corridor's end: falls fifty years into the past ---
+  createRift(game, {
+    position: new THREE.Vector3(0, 0, -12.2),
+    onEnter: () => timeTravel(game, 'act2', 'The floor— it’s falling away—'),
+  });
 
   // --- Story beats & triggers ---
   game.player.spawn(0, 3.8, 0);
   game.setCheckpoint(0, 3.8, 0);
-  game.tweens.delay(1.5, () => game.hud.say('Ashen Vale… the car’s dead. This torch is all I’ve got.', 5));
+  game.hud.fade(0, 1.5);
+  game.hud.title('ACT I', 'THE MUNICIPAL ARCHIVE · PRESENT DAY');
+  game.tweens.delay(4, () => game.hud.say('Ashen Vale… the car’s dead. This torch is all I’ve got.', 5));
 
   let warnedDoor = false;
-  let reachedEnd = false;
   game.onUpdate(() => {
     const p = game.player.feet;
     if (!warnedDoor && !door.open && p.z < -3.6 && Math.abs(p.x) < 1.6) {
       warnedDoor = true;
       game.hud.say('Boarded shut. The wood’s soaked through, it won’t catch from the torch.');
-    }
-    if (!reachedEnd && p.z < -11) {
-      reachedEnd = true;
-      game.hud.say('— End of test room —', 6);
     }
   });
 }

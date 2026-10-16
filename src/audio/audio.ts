@@ -14,6 +14,9 @@ export interface PlayOptions {
   refDistance?: number;
 }
 
+/** Real recordings dropped into src/assets/audio/<key>.mp3 replace the procedural placeholders. */
+const OVERRIDES = import.meta.glob<string>('../assets/audio/*.mp3', { eager: true, query: '?url', import: 'default' });
+
 const lerp = THREE.MathUtils.lerp;
 const clamp = THREE.MathUtils.clamp;
 const rand = (min: number, max: number) => min + Math.random() * (max - min);
@@ -22,7 +25,7 @@ const rand = (min: number, max: number) => min + Math.random() * (max - min);
  * Binaural 3D audio. Positional sounds use HRTF panning (three's PositionalAudio default), so on
  * headphones the entity's whispers and footsteps sit exactly where it is.
  *
- * Every sound starts as a procedural placeholder (synth.ts). Drop `public/assets/audio/<key>.mp3`
+ * Every sound starts as a procedural placeholder (synth.ts). Drop `src/assets/audio/<key>.mp3`
  * into the project (e.g. `whisper.mp3`, `ambience.mp3`) and it replaces the placeholder automatically.
  */
 export class GameAudio {
@@ -31,6 +34,8 @@ export class GameAudio {
   private ready = false;
   private wantRunning = false;
   private crackle?: THREE.PositionalAudio;
+  private ambience?: THREE.Audio;
+  private ambienceKey: SoundKey = 'ambience';
 
   // Behaviour timers.
   private lastSteps = 0;
@@ -58,11 +63,11 @@ export class GameAudio {
     for (const [key, buffers] of Object.entries(synthesizeAll(this.ctx))) this.bank.set(key as SoundKey, buffers);
     await Promise.all([...this.bank.keys()].map((key) => this.loadOverride(key)));
 
-    const ambience = new THREE.Audio(this.listener);
-    ambience.setBuffer(this.pick('ambience'));
-    ambience.setLoop(true);
-    ambience.setVolume(0.32);
-    ambience.play();
+    this.ambience = new THREE.Audio(this.listener);
+    this.ambience.setLoop(true);
+    this.ambience.setVolume(0.32);
+    this.ready = true;
+    this.setAmbience(this.ambienceKey);
 
     // Fire crackle sits on the torch flame: right-front of your head.
     const crackle = new THREE.PositionalAudio(this.listener);
@@ -75,17 +80,27 @@ export class GameAudio {
     this.crackle = crackle;
 
     this.bindEvents();
-    this.ready = true;
   }
 
-  /** Use a real recording from public/assets/audio if one exists. */
+  /** Swap the looping background bed (each act sets its own). */
+  setAmbience(key: SoundKey, volume = 0.32): void {
+    this.ambienceKey = key;
+    if (!this.ready || !this.ambience) return;
+    if (this.ambience.isPlaying) this.ambience.stop();
+    this.ambience.setBuffer(this.pick(key));
+    this.ambience.setVolume(volume);
+    this.ambience.play();
+  }
+
+  /** Use a real recording from src/assets/audio if one exists (found at build time, so no failed requests). */
   private async loadOverride(key: SoundKey): Promise<void> {
+    const url = OVERRIDES[`../assets/audio/${key}.mp3`];
+    if (!url) return;
     try {
-      const res = await fetch(`${import.meta.env.BASE_URL}assets/audio/${key}.mp3`);
-      if (!res.ok || !res.headers.get('content-type')?.startsWith('audio')) return;
+      const res = await fetch(url);
       this.bank.set(key, [await this.ctx.decodeAudioData(await res.arrayBuffer())]);
     } catch {
-      // No file — keep the procedural placeholder.
+      console.warn(`Could not load ${url}; using the procedural placeholder.`);
     }
   }
 
@@ -110,6 +125,9 @@ export class GameAudio {
       this.play('burn', { at, volume: 1, rate: 0.7, refDistance: 3 });
       this.play('creak', { at, volume: 0.8, rate: 0.7, refDistance: 3 });
     });
+    events.on('steam', (at) => this.play('hiss', { at, volume: 0.8, rate: rand(0.85, 1.15), refDistance: 2 }));
+    events.on('clank', (at) => this.play('clank', { at, volume: 1, rate: rand(0.85, 1.15), refDistance: 2.5 }));
+    events.on('rift', () => this.play('rift', { volume: 1 }));
     events.on('pickup', () => this.play('rustle', { volume: 0.7 }));
     events.on('refuel', () => {
       this.play('rustle', { volume: 0.5, rate: 0.7 });

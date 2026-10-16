@@ -23,6 +23,10 @@ export class Collision {
     this.boxes.delete(box);
   }
 
+  clear(): void {
+    this.boxes.clear();
+  }
+
   /** Push `feet` (a position at floor level) out of every overlapping box. */
   resolve(feet: THREE.Vector3, radius: number): void {
     for (let iter = 0; iter < 3; iter++) {

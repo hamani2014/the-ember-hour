@@ -11,6 +11,9 @@ export interface GameEvents {
   door: THREE.Vector3; // a boarded door starts crumbling
   pickup: void; // clue taken
   refuel: void; // fuel scrap used
+  steam: THREE.Vector3; // steam vent burst / pressure release
+  clank: THREE.Vector3; // metal impact (thrown junk, gates)
+  rift: void; // stepping through a temporal rift
 }
 
 type Args<T> = T extends void ? [] : [T];

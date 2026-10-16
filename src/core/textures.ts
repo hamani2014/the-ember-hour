@@ -114,7 +114,91 @@ export const textures = {
     return tex;
   }),
   cloth: once(() => canvasTexture(16, 16, 83, (g, r) => noiseFill(g, r, [86, 66, 44], 14))),
+
+  // --- Act II: Ironworks ---
+  brick: once(() =>
+    canvasTexture(64, 64, 101, (g, r) => {
+      // 4 rows of 16px bricks, alternate rows offset by half a brick; dark mortar lines.
+      noiseFill(g, r, [104, 46, 32], 12, (x, y) => {
+        const row = y >> 4;
+        const bx = (x + (row & 1 ? 16 : 0)) % 32;
+        return y % 16 < 2 || bx < 2 ? -60 : ((row * 7 + ((x + (row & 1 ? 16 : 0)) >> 5) * 13) % 5) * 4;
+      });
+      stains(g, r, 16, '#140a06');
+    }),
+  ),
+  metalFloor: once(() =>
+    canvasTexture(64, 64, 113, (g, r) => {
+      noiseFill(g, r, [62, 58, 54], 7, (x, y) => (x % 32 === 0 || y % 32 === 0 ? -26 : 0) + ((x + y) % 4 === 0 ? 4 : 0));
+      g.fillStyle = '#9a9086'; // rivets
+      for (const [x, y] of [[4, 4], [28, 4], [4, 28], [28, 28], [36, 4], [60, 4], [36, 28], [60, 28], [4, 36], [28, 36], [4, 60], [28, 60], [36, 36], [60, 36], [36, 60], [60, 60]]) g.fillRect(x, y, 2, 2);
+      stains(g, r, 10, '#1a120a');
+    }),
+  ),
+  rust: once(() =>
+    canvasTexture(64, 64, 127, (g, r) => {
+      noiseFill(g, r, [58, 46, 40], 9);
+      stains(g, r, 26, '#7a3a14');
+      stains(g, r, 10, '#2a1a10');
+    }),
+  ),
+  copper: once(() => canvasTexture(16, 16, 131, (g, r) => noiseFill(g, r, [150, 88, 52], 16))),
 };
+
+/** Chalk writing on a dark board. */
+export function chalkboardTexture(lines: string[]): THREE.CanvasTexture {
+  return canvasTexture(200, 150, 139, (g, r) => {
+    noiseFill(g, r, [30, 36, 32], 5);
+    stains(g, r, 8, '#5a6058'); // smudges
+    g.fillStyle = 'rgba(225,225,215,0.88)';
+    g.font = 'bold 11px monospace';
+    lines.forEach((line, i) => g.fillText(line, 12, 20 + i * 15));
+  });
+}
+
+/** Small brass plaque with a numeral. */
+export function plaqueTexture(text: string): THREE.CanvasTexture {
+  return canvasTexture(32, 32, 151, (g, r) => {
+    noiseFill(g, r, [150, 118, 58], 14);
+    g.strokeStyle = '#3a2a10';
+    g.strokeRect(1.5, 1.5, 29, 29);
+    g.fillStyle = '#2a1c08';
+    g.textAlign = 'center';
+    g.font = 'bold 13px serif';
+    g.fillText(text, 16, 21);
+  });
+}
+
+/** Melted pocket-watch face, stopped at 03:17. */
+export function watchFaceTexture(): THREE.CanvasTexture {
+  return canvasTexture(64, 64, 163, (g, r) => {
+    g.fillStyle = '#000';
+    g.fillRect(0, 0, 64, 64);
+    g.fillStyle = '#c8b48a';
+    g.beginPath();
+    g.ellipse(32, 30, 28, 26, 0.15, 0, Math.PI * 2); // warped by heat
+    g.fill();
+    g.fillStyle = '#7a4a20';
+    g.fillRect(28, 52, 9, 10); // drip of molten copper
+    g.fillStyle = '#2a1a0a';
+    for (let h = 0; h < 12; h++) {
+      const a = (h / 12) * Math.PI * 2;
+      g.fillRect(32 + Math.sin(a) * 22 - 1, 30 - Math.cos(a) * 20 - 1, 2, 2);
+    }
+    g.strokeStyle = '#1a0e04';
+    g.lineCap = 'round';
+    const hand = (angle: number, length: number, width: number) => {
+      g.lineWidth = width;
+      g.beginPath();
+      g.moveTo(32, 30);
+      g.lineTo(32 + Math.sin(angle) * length, 30 - Math.cos(angle) * length);
+      g.stroke();
+    };
+    hand(((3 + 17 / 60) / 12) * Math.PI * 2, 11, 3); // hour
+    hand((17 / 60) * Math.PI * 2, 18, 2); // minute
+    stains(g, r, 5, '#3a2008');
+  });
+}
 
 /** A paper flyer with typed text. `lines[0]` is the big heading. */
 export function flyerTexture(lines: string[], seed = 5): THREE.CanvasTexture {

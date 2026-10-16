@@ -15,7 +15,11 @@ export type SoundKey =
   | 'gust'
   | 'rustle'
   | 'creak'
-  | 'burn';
+  | 'burn'
+  | 'machinery'
+  | 'hiss'
+  | 'clank'
+  | 'rift';
 
 type Gen = (out: Float32Array, sr: number, rand: () => number) => void;
 
@@ -333,6 +337,73 @@ const burn: Gen = (out, sr, rand) => {
   }
 };
 
+/** Ironworks ambience: rumbling furnace, pistons thumping, steam chuffing after each stroke. */
+const machinery: Gen = (out, sr, rand) => {
+  const rumble = new Biquad(sr).lowpass(90);
+  const chuff = new Biquad(sr).highpass(1800);
+  const ring = new Biquad(sr).bandpass(430, 30);
+  const beat = 0.8;
+  let phase = 0;
+  for (let i = 0; i < out.length; i++) {
+    const t = i / sr;
+    const local = t % beat;
+    const stroke = Math.floor(t / beat);
+    phase += (TAU * (48 + 30 * Math.exp(-local / 0.03))) / sr;
+    const w = noise(rand);
+    const piston = Math.sin(phase) * Math.exp(-local / 0.08) * (stroke % 2 ? 0.7 : 1);
+    const steam = chuff.process(w) * Math.exp(-Math.max(0, local - 0.25) / 0.12) * (local > 0.25 ? 0.35 : 0);
+    const clang = ring.process(local < 0.002 && stroke % 5 === 2 ? 1 : 0) * 3;
+    out[i] = rumble.process(w) * 2.2 + Math.sin(TAU * 41 * t) * 0.25 + piston * 0.7 + steam + clang;
+  }
+};
+
+/** Pressurised steam escaping. */
+const hiss: Gen = (out, sr, rand) => {
+  const duration = out.length / sr;
+  const hp = new Biquad(sr).highpass(2600);
+  const bp = new Biquad(sr).bandpass(5500, 1.2);
+  for (let i = 0; i < out.length; i++) {
+    const t = i / sr;
+    const env = Math.min(1, t / 0.04) * Math.min(1, (duration - t) / 0.5) * (0.85 + 0.15 * Math.sin(TAU * 9 * t));
+    const w = noise(rand);
+    out[i] = (hp.process(w) * 0.6 + bp.process(w)) * env;
+  }
+};
+
+/** Heavy iron struck: inharmonic partials ringing out. */
+const clank: Gen = (out, sr, rand) => {
+  const f0 = 180 + rand() * 140;
+  const partials = [
+    [1, 1, 0.5],
+    [2.76, 0.6, 0.35],
+    [5.4, 0.45, 0.2],
+    [8.93, 0.3, 0.12],
+    [13.3, 0.2, 0.07],
+  ];
+  const click = new Biquad(sr).highpass(3000);
+  for (let i = 0; i < out.length; i++) {
+    const t = i / sr;
+    let s = 0;
+    for (const [ratio, amp, decay] of partials) s += Math.sin(TAU * f0 * ratio * t + ratio) * amp * Math.exp(-t / decay);
+    out[i] = s + click.process(noise(rand)) * Math.exp(-t / 0.006) * 1.5;
+  }
+};
+
+/** Falling through time: a deep swell with a sinking tone that cuts off. */
+const rift: Gen = (out, sr, rand) => {
+  const duration = out.length / sr;
+  const lp = new Biquad(sr);
+  let phase = 0;
+  for (let i = 0; i < out.length; i++) {
+    const t = i / sr;
+    const k = t / duration;
+    if (i % 32 === 0) lp.lowpass(150 + 3000 * k * k, 2);
+    phase += (TAU * (420 * Math.pow(0.12, k))) / sr;
+    const swell = Math.pow(k, 1.6) * Math.min(1, (duration - t) / 0.08);
+    out[i] = (lp.process(noise(rand)) * 1.2 + Math.sin(phase) * 0.5 + Math.sin(phase * 1.5) * 0.25) * swell;
+  }
+};
+
 /** Build every sound. Keys with several entries are random variations. */
 export function synthesizeAll(ctx: BaseAudioContext): Record<SoundKey, AudioBuffer[]> {
   const variants = (count: number, seconds: (i: number) => number, seed: number, gen: Gen) =>
@@ -350,5 +421,9 @@ export function synthesizeAll(ctx: BaseAudioContext): Record<SoundKey, AudioBuff
     rustle: variants(2, () => 0.45, 10, rustle),
     creak: variants(4, (i) => 0.7 + i * 0.15, 11, creak),
     burn: [render(ctx, 2.4, 12, burn)],
+    machinery: [render(ctx, 8, 13, machinery, true)],
+    hiss: [render(ctx, 1.6, 14, hiss)],
+    clank: variants(3, () => 1.3, 15, clank),
+    rift: [render(ctx, 2.2, 16, rift)],
   };
 }

@@ -15,7 +15,8 @@ Judging is done primarily from a 3-minute trailer, so atmosphere and readable me
 - Materials: always `lambert({ map: textures.x() })` from `core/ps1.ts` so they get PS1 vertex snapping.
 - Gameplay pieces: `createClue`, `createFuel` (systems/pickups.ts), `createBurnPoint` (systems/burnPoint.ts), `createBoardedDoor` (systems/door.ts).
 - Shadow entity: `game.entity.activate(phase)` (1–4, one per act), `deactivate()`, `reset()`. Tuning lives in `PHASES` in `src/entity/chronophage.ts`. Set respawn points with `game.setCheckpoint(x, z, yaw)`.
-- Audio: all sounds are procedural placeholders in `src/audio/synth.ts`. To replace one with a real recording (ElevenLabs etc.), drop `public/assets/audio/<key>.mp3` — keys: ambience, crackle, whisper, thud, step, heartbeat, shriek, whoosh, gust, rustle, creak, burn. One-shots: `game.audio.play(key, { at | attach, volume, rate })`. Gameplay → sound wiring goes through `game.events` (`src/core/events.ts`); emit an event rather than calling audio directly from gameplay code.
+- Audio: all sounds are procedural placeholders in `src/audio/synth.ts`. To replace one with a real recording (ElevenLabs etc.), drop `src/assets/audio/<key>.mp3` (restart `npm run dev` after adding a new file) — keys: ambience, crackle, whisper, thud, step, heartbeat, shriek, whoosh, gust, rustle, creak, burn, machinery, hiss, clank, rift. Each level picks its loop with `game.audio.setAmbience(key)`.
+- Levels & flow: registry in `src/levels/index.ts`; switch with `game.loadLevel('act2')` (clears world/collision/updaters/tweens; inventory + fuel carry over). Act transitions use `createRift` + `timeTravel` (`systems/rift.ts`). `?act=2` in the URL jumps straight to an act. Hazards: `createSteamVent`, gates: `createGate` (systems/door.ts). Chapter cards: `game.hud.title(main, sub)`. One-shots: `game.audio.play(key, { at | attach, volume, rate })`. Gameplay → sound wiring goes through `game.events` (`src/core/events.ts`); emit an event rather than calling audio directly from gameplay code.
 - Per-frame level logic / triggers: `game.onUpdate((dt, t) => ...)`. Timed sequences: `game.tweens.add/delay`. Inner thoughts: `game.hud.say(text)`.
 
 ## Art direction (PS1 retro horror)
@@ -52,7 +53,8 @@ src/
   audio/        procedural sound bank + 3D audio system
   systems/      interaction, inventory, burning, doors, cutscenes, audio, HUD
   levels/       prologue.ts, act1.ts, act2.ts, act3.ts, act4.ts (one file per level)
-public/assets/  models/, textures/, audio/  (loaded by URL, e.g. /assets/audio/rain.mp3)
+src/assets/audio/  optional .mp3 replacements for procedural sounds (picked up at build time)
+public/assets/  models/, textures/  (loaded by URL, e.g. /assets/models/car.glb)
 ```
 
 ## Working rules

@@ -16,6 +16,60 @@ export interface BoardedDoor {
   dissolve(onDone?: () => void): void;
 }
 
+export interface GateOptions {
+  /** Bottom-centre of the opening (world space). */
+  center: THREE.Vector3;
+  width: number;
+  height: number;
+  /** Axis the opening spans along. */
+  axis: 'x' | 'z';
+}
+
+export interface Gate {
+  readonly open: boolean;
+  /** Hydraulic lift: the slab grinds up into the ceiling. */
+  raise(onDone?: () => void): void;
+}
+
+/** Heavy riveted iron slab sealing an opening. */
+export function createGate(game: Game, o: GateOptions): Gate {
+  const thickness = 0.18;
+  const size: [number, number, number] = o.axis === 'x' ? [o.width, o.height, thickness] : [thickness, o.height, o.width];
+  const slab = new THREE.Mesh(new THREE.BoxGeometry(...size), lambert({ map: textures.rust() }));
+  slab.position.copy(o.center).setY(o.height / 2);
+  slab.castShadow = slab.receiveShadow = true;
+  game.world.add(slab);
+  const collider = game.collision.addObject(slab);
+
+  let open = false;
+  return {
+    get open() {
+      return open;
+    },
+    raise(onDone) {
+      if (open) return;
+      open = true;
+      game.events.emit('clank', slab.position.clone());
+      game.events.emit('steam', o.center);
+      const startY = slab.position.y;
+      const baseX = slab.position.x;
+      game.tweens.add(
+        2.6,
+        (k) => {
+          const ease = k * k * (3 - 2 * k);
+          slab.position.y = startY + ease * (o.height - 0.15);
+          slab.position.x = baseX + (Math.random() - 0.5) * 0.01 * (1 - k); // grinding judder
+          if (k > 0.6) game.collision.remove(collider);
+        },
+        () => {
+          game.events.emit('clank', slab.position.clone());
+          onDone?.();
+        },
+      );
+    },
+  };
+}
+
 /** Wooden planks nailed across an opening. Blocks movement until dissolved by a burned clue. */
 export function createBoardedDoor(game: Game, o: BoardedDoorOptions): BoardedDoor {
   const planks: THREE.Mesh[] = [];

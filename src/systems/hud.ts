@@ -13,6 +13,10 @@ const CSS = `
 #hud .held { position:absolute; right:28px; bottom:28px; text-align:right; font-size:13px; line-height:1.6; opacity:.85; }
 #hud .vignette { position:absolute; inset:0; opacity:0; background:radial-gradient(ellipse at center, transparent 30%, rgba(0,0,0,.6) 65%, #000 100%); }
 #hud .fade { position:absolute; inset:0; background:#000; opacity:0; }
+#hud .title { position:absolute; left:0; right:0; top:36%; text-align:center; opacity:0; transition:opacity 1.4s; }
+#hud .title.show { opacity:1; }
+#hud .title .main { font-size:36px; letter-spacing:12px; color:#ff9a4a; text-shadow:0 0 16px #ff5a0a; }
+#hud .title .subt { margin-top:12px; font-size:14px; letter-spacing:6px; opacity:.8; }
 #hud .overlay { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; background:rgba(0,0,0,.72); }
 #hud .overlay.hidden { display:none; }
 #hud .overlay h1 { font-size:44px; letter-spacing:12px; color:#ff9a4a; margin:0 0 18px; font-weight:normal; text-shadow:0 0 18px #ff5a0a; }
@@ -29,7 +33,9 @@ export class Hud {
   private overlay: HTMLElement;
   private vignette: HTMLElement;
   private fadeEl: HTMLElement;
+  private titleEl: HTMLElement;
   private subTimer = 0;
+  private titleTimer = 0;
 
   constructor(root: HTMLElement) {
     const style = document.createElement('style');
@@ -39,6 +45,7 @@ export class Hud {
     root.innerHTML = `
       <div class="vignette"></div>
       <div class="fade"></div>
+      <div class="title"><div class="main"></div><div class="subt"></div></div>
       <div class="cross"></div>
       <div class="prompt"></div>
       <div class="sub"></div>
@@ -58,6 +65,7 @@ export class Hud {
     this.overlay = q('.overlay');
     this.vignette = q('.vignette');
     this.fadeEl = q('.fade');
+    this.titleEl = q('.title');
   }
 
   /** 0..1 — darkness closing in from the screen edges as the shadow nears. */
@@ -65,10 +73,20 @@ export class Hud {
     this.vignette.style.opacity = level.toFixed(3);
   }
 
-  /** Fade the screen to black (1) or back in (0) over `seconds`. */
-  fade(to: number, seconds: number): void {
+  /** Fade the screen out (1) or back in (0) over `seconds`. */
+  fade(to: number, seconds: number, color?: string): void {
     this.fadeEl.style.transition = `opacity ${seconds}s`;
+    if (color) this.fadeEl.style.background = color;
     this.fadeEl.style.opacity = String(to);
+  }
+
+  /** Big chapter card, e.g. title('ACT II', 'THE IRONWORKS'). */
+  title(main: string, sub = '', seconds = 4.5): void {
+    this.titleEl.querySelector('.main')!.textContent = main;
+    this.titleEl.querySelector('.subt')!.textContent = sub;
+    this.titleEl.classList.add('show');
+    clearTimeout(this.titleTimer);
+    if (seconds > 0) this.titleTimer = window.setTimeout(() => this.titleEl.classList.remove('show'), seconds * 1000);
   }
 
   setPrompt(text: string | null): void {
