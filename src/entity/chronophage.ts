@@ -84,11 +84,17 @@ export class Chronophage {
   private body = new THREE.Group();
   private puffs: Puff[] = [];
   private eyeMaterial: THREE.SpriteMaterial;
+  private smoke: THREE.SpriteMaterial;
+  /** Phase 4: the vortex is full of eyes. */
+  private extraEyes = new THREE.Group();
+  /** Turned to obsidian (ending B): no thinking, no moving. */
+  private frozen = false;
   private tmp = new THREE.Vector3();
   private facing = new THREE.Vector3();
 
   constructor(private game: Game) {
     const smoke = new THREE.SpriteMaterial({ map: textures.smoke(), color: 0x000000, transparent: true, opacity: 0.92, depthWrite: false });
+    this.smoke = smoke;
     const addPuff = (angle: number, radius: number, y: number, size: number) => {
       const sprite = new THREE.Sprite(smoke);
       this.body.add(sprite);
@@ -115,6 +121,19 @@ export class Chronophage {
       this.body.add(eye);
     }
 
+    for (let i = 0; i < 9; i++) {
+      for (const dx of [-0.06, 0.06]) {
+        const eye = new THREE.Sprite(this.eyeMaterial);
+        eye.scale.setScalar(0.04);
+        const a = Math.random() * Math.PI * 1.2 - 0.6;
+        const y = 0.5 + Math.random() * 1.4;
+        eye.position.set(Math.sin(a) * 0.35 + dx, y, Math.cos(a) * 0.35);
+        this.extraEyes.add(eye);
+      }
+    }
+    this.extraEyes.visible = false;
+    this.body.add(this.extraEyes);
+
     this.group.add(this.body);
     this.group.visible = false;
     game.scene.add(this.group);
@@ -126,7 +145,7 @@ export class Chronophage {
 
   /** 0..1, how close it is — drives the screen vignette. */
   get threat(): number {
-    if (this.mode === 'dormant') return 0;
+    if (this.mode === 'dormant' || this.frozen) return 0;
     return THREE.MathUtils.clamp(1 - (this.distance - CATCH_DISTANCE) / 5, 0, 1);
   }
 
@@ -135,12 +154,16 @@ export class Chronophage {
     this.mode = 'lurk';
     this.group.visible = true;
     this.body.scale.setScalar(this.config.scale);
+    this.extraEyes.visible = phase >= 4;
     this.reset(distance);
     this.game.events.emit('wake');
   }
 
   deactivate(): void {
     this.mode = 'dormant';
+    this.frozen = false;
+    this.smoke.color.set(0x000000);
+    this.smoke.opacity = 0.92;
     this.chasePos = null;
     this.smothering = false;
     this.group.visible = false;
@@ -165,8 +188,22 @@ export class Chronophage {
     if (this.mode === 'lurk' || this.mode === 'hunt') this.huntTimer = HUNT_MEMORY * 1.6;
   }
 
+  /** Ending B: the dawn turns it to a towering obsidian statue at `at`, facing `lookAt`. Eyes stay lit. */
+  petrify(at: THREE.Vector3, lookAt: THREE.Vector3): void {
+    this.frozen = true;
+    this.chasePos = null;
+    this.smothering = false;
+    this.mode = 'caught';
+    this.group.visible = true;
+    this.group.position.copy(at);
+    this.group.lookAt(lookAt.x, at.y, lookAt.z);
+    this.smoke.color.set(0x16141c);
+    this.smoke.opacity = 1;
+    this.eyeMaterial.opacity = 0.95;
+  }
+
   update(dt: number, t: number): void {
-    if (this.mode === 'dormant') return;
+    if (this.mode === 'dormant' || this.frozen) return;
     if (this.mode !== 'caught') this.think(dt);
     this.place();
     this.animate(t);

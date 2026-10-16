@@ -21,7 +21,11 @@ export type SoundKey =
   | 'clank'
   | 'rift'
   | 'void'
-  | 'shatter';
+  | 'shatter'
+  | 'organ'
+  | 'bell'
+  | 'birds'
+  | 'engine';
 
 type Gen = (out: Float32Array, sr: number, rand: () => number) => void;
 
@@ -438,6 +442,89 @@ const shatter: Gen = (out, sr, rand) => {
   }
 };
 
+/** Basilica: a held, swelling organ chord in a cold stone room. */
+const organ: Gen = (out, sr, rand) => {
+  const air = new Biquad(sr).highpass(2500);
+  const notes = [65.4, 98.0, 130.8, 196.0, 261.6];
+  for (let i = 0; i < out.length; i++) {
+    const t = i / sr;
+    let s = 0;
+    notes.forEach((f, k) => {
+      const swell = 0.6 + 0.4 * Math.sin(TAU * (0.05 + k * 0.013) * t + k);
+      s += (Math.sin(TAU * f * t) + 0.3 * Math.sin(TAU * f * 2.003 * t) + 0.15 * Math.sin(TAU * f * 3.01 * t)) * swell / (1 + k * 0.4);
+    });
+    out[i] = s * 0.3 + air.process(noise(rand)) * 0.08;
+  }
+};
+
+/** A church bell: hum, prime, minor third, fifth and nominal partials with long, beating decays. */
+const bell: Gen = (out, sr, rand) => {
+  const f0 = 196;
+  const partials = [
+    [0.5, 0.8, 3.5],
+    [1, 1, 2.6],
+    [1.19, 0.6, 2.0],
+    [1.5, 0.45, 1.6],
+    [2.0, 0.5, 1.3],
+    [2.52, 0.25, 0.9],
+    [3.0, 0.2, 0.7],
+  ];
+  const strike = new Biquad(sr).bandpass(2400, 1.5);
+  for (let i = 0; i < out.length; i++) {
+    const t = i / sr;
+    let s = 0;
+    for (const [ratio, amp, decay] of partials) s += Math.sin(TAU * f0 * ratio * t + Math.sin(TAU * 1.3 * t) * 0.3) * amp * Math.exp(-t / decay);
+    out[i] = s + strike.process(noise(rand)) * Math.exp(-t / 0.02) * 2;
+  }
+};
+
+/** Morning birdsong: quick chirps and trills from a few birds over a faint breeze. */
+const birds: Gen = (out, sr, rand) => {
+  const breeze = new Biquad(sr).bandpass(600, 0.8);
+  const chirps: { at: number; len: number; f0: number; f1: number; amp: number }[] = [];
+  const duration = out.length / sr;
+  for (const base of [2800, 3900, 5200]) {
+    for (let t = rand() * 1.5; t < duration - 0.5; t += 0.8 + rand() * 2.2) {
+      const n = 2 + Math.floor(rand() * 4);
+      for (let k = 0; k < n; k++) {
+        const up = rand() < 0.6;
+        chirps.push({ at: t + k * (0.09 + rand() * 0.05), len: 0.04 + rand() * 0.07, f0: base * (up ? 0.85 : 1.2), f1: base * (up ? 1.25 : 0.8), amp: 0.3 + rand() * 0.7 });
+      }
+    }
+  }
+  const phases = chirps.map(() => 0);
+  for (let i = 0; i < out.length; i++) {
+    const t = i / sr;
+    let s = 0;
+    chirps.forEach((c, k) => {
+      const local = (t - c.at) / c.len;
+      if (local < 0 || local > 1) return;
+      phases[k] += (TAU * (c.f0 + (c.f1 - c.f0) * local)) / sr;
+      s += Math.sin(phases[k]) * Math.sin(Math.PI * local) * c.amp;
+    });
+    out[i] = s * 0.5 + breeze.process(noise(rand)) * 0.25;
+  }
+};
+
+/** An old sedan idling: low firing pulses with a rough, uneven lope. */
+const engine: Gen = (out, sr, rand) => {
+  const lp = new Biquad(sr).lowpass(160, 1.2);
+  const rattle = new Biquad(sr).bandpass(900, 3);
+  const rate = 13;
+  let next = 0;
+  let pulse = 0;
+  for (let i = 0; i < out.length; i++) {
+    const t = i / sr;
+    if (t >= next) {
+      pulse = 0.7 + rand() * 0.3;
+      next = t + (1 / rate) * (0.9 + rand() * 0.2);
+    }
+    pulse *= Math.exp(-1 / (sr * 0.012));
+    const w = noise(rand);
+    out[i] = lp.process(pulse * (1 + w * 0.3)) * 3 + Math.sin(TAU * 26 * t) * 0.15 + rattle.process(w) * pulse * 0.08;
+  }
+};
+
 /** Build every sound. Keys with several entries are random variations. */
 export function synthesizeAll(ctx: BaseAudioContext): Record<SoundKey, AudioBuffer[]> {
   const variants = (count: number, seconds: (i: number) => number, seed: number, gen: Gen) =>
@@ -461,5 +548,9 @@ export function synthesizeAll(ctx: BaseAudioContext): Record<SoundKey, AudioBuff
     rift: [render(ctx, 2.2, 16, rift)],
     void: [render(ctx, 10, 17, voidBed, true)],
     shatter: [render(ctx, 1.6, 18, shatter)],
+    organ: [render(ctx, 12, 19, organ, true)],
+    bell: [render(ctx, 5, 20, bell)],
+    birds: [render(ctx, 9, 21, birds, true)],
+    engine: [render(ctx, 3, 22, engine, true)],
   };
 }

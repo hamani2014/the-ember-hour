@@ -18,6 +18,8 @@ export interface BurnPointOptions {
   /** Fuel the torch spends to light it. */
   lightCost?: number;
   onLit?: () => void;
+  /** Prompt shown when lit but no acceptable clue is held (return null for none). */
+  idlePrompt?: () => string | null;
   onBurn: (clue: Clue) => void;
 }
 
@@ -49,7 +51,7 @@ export function createBurnPoint(game: Game, o: BurnPointOptions): void {
       if (busy) return null;
       if (!lit) return game.torch.lit ? `Light the ${o.name}` : null;
       const clue = game.inventory.find(o.accepts);
-      return clue ? `Burn ${clue.name}` : null;
+      return clue ? `Burn ${clue.name}` : (o.idlePrompt?.() ?? null);
     },
     interact: () => {
       if (!lit) {

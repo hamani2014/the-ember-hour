@@ -40,6 +40,8 @@ export class Game {
   /** Where the player wakes up after the shadow takes them. Levels move this forward. */
   checkpoint = { x: 0, z: 0, yaw: 0 };
   level: LevelId | null = null;
+  /** True during cutscenes: the player can't move or interact; level scripts drive the camera. */
+  controlsLocked = false;
   /** One-off story/hint flags that persist across levels (e.g. "already showed the steam hint"). */
   readonly flags = new Set<string>();
   private pendingLevel: LevelId | null = null;
@@ -122,14 +124,17 @@ export class Game {
       this.audio.setRunning(playing);
       if (playing) {
         this.audio.update(dt);
-        this.player.update(dt);
-        this.torch.update(dt, t, this.player.state, this.player.bob);
+        if (!this.controlsLocked) {
+          this.player.update(dt);
+          this.torch.update(dt, t, this.player.state, this.player.bob);
+        }
         this.entity.update(dt, t);
         for (const fn of this.updaters) fn(dt, t);
         this.tweens.update(dt);
       }
       this.hud.setThreat(this.entity.threat);
-      this.interaction.update();
+      if (!this.controlsLocked) this.interaction.update();
+      else this.hud.setPrompt(null);
       this.embers.update(dt, t);
       this.hud.setFuel(this.torch.ratio);
       this.renderer.render(this.scene, this.camera);

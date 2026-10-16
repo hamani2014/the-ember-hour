@@ -172,8 +172,8 @@ export class GameAudio {
   }
 
   /** A looping 3D sound attached to a level object (e.g. a roaring fire). Stopped automatically on level change. */
-  playLoop(key: SoundKey, attach: THREE.Object3D, volume = 1, refDistance = 2): void {
-    if (!this.ready) return;
+  playLoop(key: SoundKey, attach: THREE.Object3D, volume = 1, refDistance = 2): THREE.PositionalAudio | null {
+    if (!this.ready) return null;
     const sound = new THREE.PositionalAudio(this.listener);
     sound.setBuffer(this.pick(key));
     sound.setLoop(true);
@@ -182,6 +182,12 @@ export class GameAudio {
     attach.add(sound);
     sound.play();
     this.levelLoops.push(sound);
+    return sound;
+  }
+
+  /** Silence the background bed (cutscenes). `setAmbience` brings it back. */
+  stopAmbience(): void {
+    if (this.ambience?.isPlaying) this.ambience.stop();
   }
 
   stopLevelLoops(): void {

@@ -274,3 +274,85 @@ export function flyerTexture(lines: string[], seed = 5): THREE.CanvasTexture {
     lines.slice(1).forEach((line, i) => g.fillText(line, 48, 84 + i * 12));
   });
 }
+
+export type GlassIcon = 'flyer' | 'watch' | 'crystal' | 'scroll';
+
+/** Pointed-arch stained-glass window: jewel-coloured cells in black leading, optionally an icon and numeral. */
+export function stainedGlassTexture(seed: number, icon?: GlassIcon, numeral?: string): THREE.CanvasTexture {
+  return canvasTexture(48, 96, 300 + seed, (g, r) => {
+    const jewels = ['#8a1420', '#1a3a8a', '#1e6a3a', '#c89a2a', '#5a1a7a', '#2a6a8a', '#a8401a'];
+    for (let y = 0; y < 96; y += 8) {
+      for (let x = 0; x < 48; x += 8) {
+        g.fillStyle = jewels[Math.floor(r() * jewels.length)];
+        g.fillRect(x + (y % 16 ? 4 : 0) - 4, y, 8, 8);
+      }
+    }
+    g.fillStyle = '#000';
+    for (let y = 0; y < 96; y += 8) g.fillRect(0, y, 48, 1);
+    for (let y = 0; y < 96; y += 8) for (let x = (y % 16 ? 0 : 4); x < 48; x += 8) g.fillRect(x, y, 1, 8);
+
+    if (icon) {
+      g.fillStyle = '#e8d8a8';
+      g.strokeStyle = '#000';
+      g.lineWidth = 2;
+      g.beginPath();
+      if (icon === 'flyer') g.rect(14, 30, 20, 26);
+      if (icon === 'watch') g.arc(24, 43, 12, 0, Math.PI * 2);
+      if (icon === 'crystal') {
+        g.moveTo(24, 28);
+        g.lineTo(36, 43);
+        g.lineTo(24, 58);
+        g.lineTo(12, 43);
+        g.closePath();
+      }
+      if (icon === 'scroll') g.rect(12, 34, 24, 18);
+      g.fill();
+      g.stroke();
+      g.fillStyle = '#000';
+      if (icon === 'flyer') for (let y = 36; y < 54; y += 4) g.fillRect(17, y, 14, 1);
+      if (icon === 'watch') {
+        g.fillRect(23, 34, 2, 10);
+        g.fillRect(24, 42, 7, 2);
+      }
+      if (icon === 'scroll') {
+        g.fillRect(10, 32, 3, 22);
+        g.fillRect(35, 32, 3, 22);
+      }
+      if (numeral) {
+        g.fillStyle = '#f0e0b0';
+        g.font = 'bold 12px serif';
+        g.textAlign = 'center';
+        g.fillText(numeral, 24, 78);
+      }
+    }
+
+    // Cut the pointed arch: everything outside it is stone-black.
+    g.fillStyle = '#000';
+    g.beginPath();
+    g.moveTo(0, 0);
+    g.lineTo(0, 22);
+    g.quadraticCurveTo(2, 4, 24, 0);
+    g.quadraticCurveTo(46, 4, 48, 22);
+    g.lineTo(48, 0);
+    g.closePath();
+    g.fill();
+    g.fillRect(0, 0, 48, 1);
+    g.fillRect(0, 95, 48, 1);
+    g.fillRect(0, 0, 1, 96);
+    g.fillRect(47, 0, 1, 96);
+  });
+}
+
+/** Hand-painted roadside sign. */
+export function signTexture(lines: string[]): THREE.CanvasTexture {
+  return canvasTexture(160, 64, 401, (g, r) => {
+    noiseFill(g, r, [190, 182, 160], 10);
+    stains(g, r, 10, '#5a3a1a');
+    g.fillStyle = '#2a1a10';
+    g.textAlign = 'center';
+    g.font = 'bold 15px serif';
+    g.fillText(lines[0], 80, 26);
+    g.font = '11px serif';
+    lines.slice(1).forEach((line, i) => g.fillText(line, 80, 44 + i * 13));
+  });
+}

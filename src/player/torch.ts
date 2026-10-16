@@ -49,6 +49,11 @@ export class Torch {
     camera.add(this.view);
   }
 
+  /** Show/hide the torch (and its light) — cutscenes. */
+  setHeld(held: boolean): void {
+    this.view.visible = held;
+  }
+
   get lit(): boolean {
     return this.fuel > 0;
   }
