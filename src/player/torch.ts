@@ -20,6 +20,8 @@ export class Torch {
   private wasLit = true;
   /** 0..1 — a draft knocking the flame down; recovers on its own. */
   gutter = 0;
+  /** False until the player has a torch at all (prologue): hidden, unlit, no fuel use. */
+  carried = true;
 
   constructor(camera: THREE.Camera, startFuel = 60) {
     this.fuel = startFuel;
@@ -71,6 +73,10 @@ export class Torch {
   }
 
   update(dt: number, t: number, state: MoveState, bob: number): void {
+    if (!this.carried) {
+      this.view.visible = false;
+      return;
+    }
     if (this.lit) this.spend(BURN_RATE[state] * dt);
     if (this.wasLit && !this.lit) this.onExtinguish?.();
     this.wasLit = this.lit;

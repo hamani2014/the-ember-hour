@@ -15,7 +15,8 @@ export class PlayerController {
   readonly feet = new THREE.Vector3();
   readonly velocity = new THREE.Vector3();
   readonly radius = 0.3;
-  readonly eyeHeight = 1.6;
+  /** 1.6 standing; lower when seated. */
+  eyeHeight = 1.6;
   yaw = 0;
   pitch = 0;
   state: MoveState = 'still';
@@ -27,6 +28,8 @@ export class PlayerController {
   shake = 0;
   /** Increments once per footfall (audio listens to this). */
   steps = 0;
+  /** False = look around only (e.g. sitting in the car). */
+  canMove = true;
   private bobPhase = 0;
   private wish = new THREE.Vector3();
 
@@ -53,9 +56,11 @@ export class PlayerController {
     if (input.locked) {
       this.yaw -= input.mouseDX * MOUSE_SENSITIVITY;
       this.pitch = THREE.MathUtils.clamp(this.pitch - input.mouseDY * MOUSE_SENSITIVITY, -1.45, 1.45);
-      forward = (input.isDown('KeyW') ? 1 : 0) - (input.isDown('KeyS') ? 1 : 0);
-      strafe = (input.isDown('KeyD') ? 1 : 0) - (input.isDown('KeyA') ? 1 : 0);
-      sprinting = (input.isDown('ShiftLeft') || input.isDown('ShiftRight')) && forward > 0;
+      if (this.canMove) {
+        forward = (input.isDown('KeyW') ? 1 : 0) - (input.isDown('KeyS') ? 1 : 0);
+        strafe = (input.isDown('KeyD') ? 1 : 0) - (input.isDown('KeyA') ? 1 : 0);
+        sprinting = (input.isDown('ShiftLeft') || input.isDown('ShiftRight')) && forward > 0;
+      }
     }
 
     const sin = Math.sin(this.yaw);

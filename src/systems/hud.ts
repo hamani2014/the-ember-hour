@@ -117,6 +117,10 @@ export class Hud {
     this.subTimer = window.setTimeout(() => this.sub.classList.remove('show'), seconds * 1000);
   }
 
+  setFuelVisible(visible: boolean): void {
+    this.fuel.style.display = visible ? '' : 'none';
+  }
+
   setFuel(ratio: number): void {
     this.fuelFill.style.width = `${(ratio * 100).toFixed(1)}%`;
     this.fuel.classList.toggle('low', ratio < 0.2);

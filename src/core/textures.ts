@@ -356,3 +356,20 @@ export function signTexture(lines: string[]): THREE.CanvasTexture {
     lines.slice(1).forEach((line, i) => g.fillText(line, 80, 44 + i * 13));
   });
 }
+
+/** Raindrops beading on glass (transparent; tile and scroll it). */
+export function raindropsTexture(): THREE.CanvasTexture {
+  return canvasTexture(64, 64, 411, (g, r) => {
+    g.clearRect(0, 0, 64, 64);
+    for (let i = 0; i < 46; i++) {
+      const x = r() * 64;
+      const y = r() * 64;
+      const size = 0.6 + r() * 1.6;
+      g.fillStyle = `rgba(220,230,255,${0.25 + r() * 0.45})`;
+      g.beginPath();
+      g.ellipse(x, y, size, size * (1 + r() * 0.8), 0, 0, Math.PI * 2);
+      g.fill();
+      if (r() < 0.3) g.fillRect(Math.floor(x), Math.floor(y), 1, 3 + Math.floor(r() * 6)); // a running streak
+    }
+  });
+}

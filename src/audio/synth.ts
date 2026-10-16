@@ -25,7 +25,11 @@ export type SoundKey =
   | 'organ'
   | 'bell'
   | 'birds'
-  | 'engine';
+  | 'engine'
+  | 'rain'
+  | 'static'
+  | 'thunder'
+  | 'match';
 
 type Gen = (out: Float32Array, sr: number, rand: () => number) => void;
 
@@ -525,6 +529,60 @@ const engine: Gen = (out, sr, rand) => {
   }
 };
 
+/** Steady rain: hiss of countless drops plus individual taps on metal and glass. */
+const rain: Gen = (out, sr, rand) => {
+  const hiss = new Biquad(sr).bandpass(3200, 0.6);
+  const body = new Biquad(sr).lowpass(900);
+  const tap = new Biquad(sr).bandpass(2400, 4);
+  let drop = 0;
+  for (let i = 0; i < out.length; i++) {
+    const t = i / sr;
+    const w = noise(rand);
+    if (rand() < 90 / sr) drop = 0.4 + rand() * 0.6;
+    drop *= Math.exp(-1 / (sr * 0.003));
+    out[i] = hiss.process(w) * (0.8 + 0.2 * Math.sin(TAU * 0.13 * t)) + body.process(w) * 0.5 + tap.process(w) * drop * 4;
+  }
+};
+
+/** AM radio between stations: band-limited hiss, crackle and a warbling carrier. */
+const radioStatic: Gen = (out, sr, rand) => {
+  const band = new Biquad(sr).bandpass(1500, 0.9);
+  let crack = 0;
+  for (let i = 0; i < out.length; i++) {
+    const t = i / sr;
+    if (rand() < 6 / sr) crack = 1;
+    crack *= Math.exp(-1 / (sr * 0.008));
+    const carrier = Math.sin(TAU * (520 + 40 * Math.sin(TAU * 0.3 * t)) * t) * 0.12 * (0.5 + 0.5 * Math.sin(TAU * 0.07 * t));
+    out[i] = band.process(noise(rand)) * (0.7 + 0.3 * Math.sin(TAU * 3.1 * t)) + carrier + noise(rand) * crack * 0.8;
+  }
+};
+
+/** Distant thunder: a crack, then a long rolling rumble. */
+const thunder: Gen = (out, sr, rand) => {
+  const duration = out.length / sr;
+  const rumble = new Biquad(sr).lowpass(120);
+  const crack = new Biquad(sr).bandpass(700, 0.7);
+  for (let i = 0; i < out.length; i++) {
+    const t = i / sr;
+    const w = noise(rand);
+    const roll = (0.6 + 0.4 * Math.sin(TAU * 1.7 * t) * Math.sin(TAU * 0.6 * t)) * Math.min(1, t / 0.15) * Math.exp(-t / (duration * 0.35));
+    out[i] = rumble.process(w) * roll * 5 + crack.process(w) * Math.exp(-t / 0.12) * 0.6;
+  }
+};
+
+/** A match struck on the box, catching. */
+const match: Gen = (out, sr, rand) => {
+  const scratch = new Biquad(sr).highpass(2500);
+  const flare = new Biquad(sr).lowpass(1800);
+  for (let i = 0; i < out.length; i++) {
+    const t = i / sr;
+    const w = noise(rand);
+    const s = t < 0.12 ? (0.5 + 0.5 * Math.sin(TAU * 40 * t)) * (1 - t / 0.12) : 0;
+    const f = t > 0.1 ? Math.min(1, (t - 0.1) / 0.05) * Math.exp(-(t - 0.1) / 0.35) : 0;
+    out[i] = scratch.process(w) * s + flare.process(w) * f * 0.8;
+  }
+};
+
 /** Build every sound. Keys with several entries are random variations. */
 export function synthesizeAll(ctx: BaseAudioContext): Record<SoundKey, AudioBuffer[]> {
   const variants = (count: number, seconds: (i: number) => number, seed: number, gen: Gen) =>
@@ -552,5 +610,9 @@ export function synthesizeAll(ctx: BaseAudioContext): Record<SoundKey, AudioBuff
     bell: [render(ctx, 5, 20, bell)],
     birds: [render(ctx, 9, 21, birds, true)],
     engine: [render(ctx, 3, 22, engine, true)],
+    rain: [render(ctx, 6, 23, rain, true)],
+    static: [render(ctx, 5, 24, radioStatic, true)],
+    thunder: [render(ctx, 4.5, 25, thunder)],
+    match: [render(ctx, 0.7, 26, match)],
   };
 }

@@ -84,6 +84,14 @@ export class Game {
     this.entity.deactivate();
     this.audio.stopLevelLoops();
     this.hud.setPrompt(null);
+    // Every level starts from normal play: standing, torch in hand, HUD on.
+    this.controlsLocked = false;
+    this.player.canMove = true;
+    this.player.eyeHeight = 1.6;
+    this.torch.carried = true;
+    this.torch.setHeld(true);
+    this.hud.setFuelVisible(true);
+    this.hud.setCinematic(false);
     this.level = id;
     LEVELS[id](this);
   }
