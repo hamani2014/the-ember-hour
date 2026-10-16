@@ -14,6 +14,7 @@ Judging is done primarily from a 3-minute trailer, so atmosphere and readable me
 - Levels are functions `buildX(game: Game)` in `src/levels/`. Use `box()` / `plane()` from `levels/builder.ts` for geometry (boxes collide by default).
 - Materials: always `lambert({ map: textures.x() })` from `core/ps1.ts` so they get PS1 vertex snapping.
 - Gameplay pieces: `createClue`, `createFuel` (systems/pickups.ts), `createBurnPoint` (systems/burnPoint.ts), `createBoardedDoor` (systems/door.ts).
+- Shadow entity: `game.entity.activate(phase)` (1–4, one per act), `deactivate()`, `reset()`. Tuning lives in `PHASES` in `src/entity/chronophage.ts`. Set respawn points with `game.setCheckpoint(x, z, yaw)`.
 - Per-frame level logic / triggers: `game.onUpdate((dt, t) => ...)`. Timed sequences: `game.tweens.add/delay`. Inner thoughts: `game.hud.say(text)`.
 
 ## Art direction (PS1 retro horror)

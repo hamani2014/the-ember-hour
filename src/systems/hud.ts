@@ -11,6 +11,8 @@ const CSS = `
 #hud .fuel.low .fill { animation: hud-pulse .6s infinite alternate; }
 @keyframes hud-pulse { from { opacity:1 } to { opacity:.3 } }
 #hud .held { position:absolute; right:28px; bottom:28px; text-align:right; font-size:13px; line-height:1.6; opacity:.85; }
+#hud .vignette { position:absolute; inset:0; opacity:0; background:radial-gradient(ellipse at center, transparent 30%, rgba(0,0,0,.6) 65%, #000 100%); }
+#hud .fade { position:absolute; inset:0; background:#000; opacity:0; }
 #hud .overlay { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; background:rgba(0,0,0,.72); }
 #hud .overlay.hidden { display:none; }
 #hud .overlay h1 { font-size:44px; letter-spacing:12px; color:#ff9a4a; margin:0 0 18px; font-weight:normal; text-shadow:0 0 18px #ff5a0a; }
@@ -25,6 +27,8 @@ export class Hud {
   private fuelFill: HTMLElement;
   private held: HTMLElement;
   private overlay: HTMLElement;
+  private vignette: HTMLElement;
+  private fadeEl: HTMLElement;
   private subTimer = 0;
 
   constructor(root: HTMLElement) {
@@ -33,6 +37,8 @@ export class Hud {
     document.head.appendChild(style);
 
     root.innerHTML = `
+      <div class="vignette"></div>
+      <div class="fade"></div>
       <div class="cross"></div>
       <div class="prompt"></div>
       <div class="sub"></div>
@@ -50,6 +56,19 @@ export class Hud {
     this.fuelFill = q('.fuel .fill');
     this.held = q('.held');
     this.overlay = q('.overlay');
+    this.vignette = q('.vignette');
+    this.fadeEl = q('.fade');
+  }
+
+  /** 0..1 — darkness closing in from the screen edges as the shadow nears. */
+  setThreat(level: number): void {
+    this.vignette.style.opacity = level.toFixed(3);
+  }
+
+  /** Fade the screen to black (1) or back in (0) over `seconds`. */
+  fade(to: number, seconds: number): void {
+    this.fadeEl.style.transition = `opacity ${seconds}s`;
+    this.fadeEl.style.opacity = String(to);
   }
 
   setPrompt(text: string | null): void {

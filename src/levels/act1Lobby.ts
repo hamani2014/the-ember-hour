@@ -83,6 +83,12 @@ export function buildAct1Lobby(game: Game): void {
     name: "Mayor's Missing Bulletin",
     object: flyer,
     thought: 'Mayor Arthur Vance. Missing three years… Vance.',
+    // Taking the flyer wakes the shadow.
+    onTake: () =>
+      game.tweens.delay(5, () => {
+        game.entity.activate(1);
+        game.hud.say('Something moved behind me. Keep the light on it.');
+      }),
   });
 
   // --- Wall sconce (right wall) — the burn point ---
@@ -105,7 +111,7 @@ export function buildAct1Lobby(game: Game): void {
     onLit: () => game.hud.say('Still takes a flame.'),
     onBurn: () => {
       game.hud.say('The boards… they’re burning away with it.');
-      door.dissolve();
+      door.dissolve(() => game.setCheckpoint(0, -6, 0));
     },
   });
 
@@ -126,6 +132,7 @@ export function buildAct1Lobby(game: Game): void {
 
   // --- Story beats & triggers ---
   game.player.spawn(0, 3.8, 0);
+  game.setCheckpoint(0, 3.8, 0);
   game.tweens.delay(1.5, () => game.hud.say('Ashen Vale… the car’s dead. This torch is all I’ve got.', 5));
 
   let warnedDoor = false;

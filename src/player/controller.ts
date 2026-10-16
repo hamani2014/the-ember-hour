@@ -23,6 +23,8 @@ export class PlayerController {
   noise = 0;
   /** Vertical view-bob offset, also used to sway the held torch. */
   bob = 0;
+  /** Camera shake strength (radians); decays automatically. */
+  shake = 0;
   private bobPhase = 0;
   private wish = new THREE.Vector3();
 
@@ -76,12 +78,21 @@ export class PlayerController {
 
     this.bobPhase += speed * dt * 2.4;
     this.bob = Math.sin(this.bobPhase * 2) * 0.03 * Math.min(speed / WALK_SPEED, 1.6);
+    this.shake = Math.max(0, this.shake - dt * 0.15);
     this.applyCamera();
   }
 
+  /** World-space XZ direction the player is facing. */
+  forward(out = new THREE.Vector3()): THREE.Vector3 {
+    return out.set(-Math.sin(this.yaw), 0, -Math.cos(this.yaw));
+  }
+
   private applyCamera(): void {
+    const s = this.shake;
+    const jx = (Math.random() - 0.5) * s;
+    const jy = (Math.random() - 0.5) * s;
     this.camera.position.set(this.feet.x, this.feet.y + this.eyeHeight + this.bob, this.feet.z);
-    this.camera.rotation.set(this.pitch, this.yaw, Math.sin(this.bobPhase) * 0.004, 'YXZ');
+    this.camera.rotation.set(this.pitch + jx, this.yaw + jy, Math.sin(this.bobPhase) * 0.004, 'YXZ');
     this.camera.updateMatrixWorld();
   }
 }

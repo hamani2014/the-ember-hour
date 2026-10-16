@@ -95,6 +95,24 @@ export const textures = {
       for (let y = 8; y < 36; y += 4) g.fillRect(4, y, 18 + r() * 8, 1);
     }),
   ),
+  /** Soft white puff with alpha — tint via material colour (black for the shadow entity). */
+  smoke: once(() => {
+    const tex = canvasTexture(32, 32, 97, (g, r) => {
+      const img = g.createImageData(32, 32);
+      for (let y = 0; y < 32; y++) {
+        for (let x = 0; x < 32; x++) {
+          const d = Math.hypot(x - 15.5, y - 15.5) / 16;
+          const a = Math.max(0, 1 - d) ** 1.5 * (0.7 + r() * 0.3);
+          const i = (y * 32 + x) * 4;
+          img.data[i] = img.data[i + 1] = img.data[i + 2] = 255;
+          img.data[i + 3] = a * 255;
+        }
+      }
+      g.putImageData(img, 0, 0);
+    });
+    tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
+    return tex;
+  }),
   cloth: once(() => canvasTexture(16, 16, 83, (g, r) => noiseFill(g, r, [86, 66, 44], 14))),
 };
 

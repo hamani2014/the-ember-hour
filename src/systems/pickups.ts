@@ -3,7 +3,7 @@ import type { Game } from '../core/game';
 import type { Interactable } from './interaction';
 
 /** A clue the player can take. It's carried until burned at a matching burn point. */
-export function createClue(game: Game, o: { id: string; name: string; object: THREE.Object3D; thought?: string }): void {
+export function createClue(game: Game, o: { id: string; name: string; object: THREE.Object3D; thought?: string; onTake?: () => void }): void {
   const item: Interactable = game.interaction.register({
     object: o.object,
     prompt: () => `Take ${o.name}`,
@@ -12,6 +12,7 @@ export function createClue(game: Game, o: { id: string; name: string; object: TH
       o.object.removeFromParent();
       game.inventory.add({ id: o.id, name: o.name, object: o.object });
       if (o.thought) game.hud.say(o.thought);
+      o.onTake?.();
     },
   });
 }
