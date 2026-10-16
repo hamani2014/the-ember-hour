@@ -80,6 +80,7 @@ export class Game {
     this.updaters.length = 0;
     this.tweens.clear();
     this.entity.deactivate();
+    this.audio.stopLevelLoops();
     this.hud.setPrompt(null);
     this.level = id;
     LEVELS[id](this);

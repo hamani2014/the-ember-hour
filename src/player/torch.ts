@@ -18,6 +18,8 @@ export class Torch {
   private view = new THREE.Group();
   private fire: Fire;
   private wasLit = true;
+  /** 0..1 — a draft knocking the flame down; recovers on its own. */
+  gutter = 0;
 
   constructor(camera: THREE.Camera, startFuel = 60) {
     this.fuel = startFuel;
@@ -67,11 +69,12 @@ export class Torch {
     if (this.lit) this.spend(BURN_RATE[state] * dt);
     if (this.wasLit && !this.lit) this.onExtinguish?.();
     this.wasLit = this.lit;
+    this.gutter = Math.max(0, this.gutter - dt * 0.9);
 
     const k = this.ratio;
     const flicker = 1 + Math.sin(t * 13) * 0.05 + Math.sin(t * 7.3 + 1) * 0.07 + (Math.random() - 0.5) * 0.08;
     if (this.lit) {
-      this.light.intensity = (2.5 + 6 * k) * flicker;
+      this.light.intensity = (2.5 + 6 * k) * flicker * (1 - 0.75 * this.gutter);
       this.light.distance = 5 + 9 * k;
       this.light.color.copy(LIT_COLOR);
     } else {
@@ -82,7 +85,7 @@ export class Torch {
     }
 
     this.fire.group.visible = this.lit;
-    this.fire.setStrength(0.45 + 0.55 * k);
+    this.fire.setStrength((0.45 + 0.55 * k) * (1 - 0.6 * this.gutter));
     this.fire.update(t);
 
     this.view.position.y = -0.32 + bob * 0.6;

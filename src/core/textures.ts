@@ -143,7 +143,63 @@ export const textures = {
     }),
   ),
   copper: once(() => canvasTexture(16, 16, 131, (g, r) => noiseFill(g, r, [150, 88, 52], 16))),
+
+  // --- Act III: Observatory (the future) ---
+  stone: once(() =>
+    canvasTexture(64, 64, 171, (g, r) => {
+      noiseFill(g, r, [96, 94, 108], 8, (_x, y) => (y % 32 === 0 ? -22 : 0));
+      cracks(g, r, 5, 'rgba(20,14,30,0.8)');
+      stains(g, r, 8, '#2a1a3a');
+    }),
+  ),
+  stoneFloor: once(() =>
+    canvasTexture(64, 64, 181, (g, r) => {
+      noiseFill(g, r, [78, 74, 88], 7, (x, y) => (x % 32 === 0 || y % 32 === 0 ? -24 : 0) + (Math.hypot(x - 32, y - 32) % 12 < 1 ? 8 : 0));
+      cracks(g, r, 4, 'rgba(18,10,24,0.85)');
+    }),
+  ),
+  brass: once(() => canvasTexture(16, 16, 191, (g, r) => noiseFill(g, r, [170, 130, 62], 14))),
+  /** Equirect-ish sky for an inside-out sphere: purple zenith bleeding down into red, with stars and drips. */
+  sky: once(() =>
+    canvasTexture(256, 128, 199, (g, r) => {
+      const grad = g.createLinearGradient(0, 0, 0, 128);
+      grad.addColorStop(0, '#12041e');
+      grad.addColorStop(0.45, '#3a0a42');
+      grad.addColorStop(0.75, '#6a0c22');
+      grad.addColorStop(1, '#2a0408');
+      g.fillStyle = grad;
+      g.fillRect(0, 0, 256, 128);
+      for (let i = 0; i < 90; i++) {
+        g.fillStyle = `rgba(255,230,255,${0.3 + r() * 0.6})`;
+        g.fillRect(Math.floor(r() * 256), Math.floor(r() * 50), 1, 1);
+      }
+      for (let i = 0; i < 40; i++) {
+        // red streaks bleeding down the sky
+        const x = Math.floor(r() * 256);
+        const y = 30 + r() * 40;
+        g.fillStyle = `rgba(${150 + r() * 80},10,${30 + r() * 40},${0.25 + r() * 0.4})`;
+        g.fillRect(x, y, 1 + Math.floor(r() * 2), 10 + r() * 50);
+      }
+    }),
+  ),
 };
+
+/** Thin wandering dark lines. */
+function cracks(g: CanvasRenderingContext2D, rand: () => number, count: number, color: string) {
+  g.fillStyle = color;
+  const { width: w, height: h } = g.canvas;
+  for (let i = 0; i < count; i++) {
+    let x = rand() * w;
+    let y = rand() * h;
+    let a = rand() * Math.PI * 2;
+    for (let s = 0; s < 18 + rand() * 20; s++) {
+      g.fillRect(Math.floor(x) % w, Math.floor(y) % h, 1, 1);
+      a += (rand() - 0.5) * 0.9;
+      x = (x + Math.cos(a) + w) % w;
+      y = (y + Math.sin(a) + h) % h;
+    }
+  }
+}
 
 /** Chalk writing on a dark board. */
 export function chalkboardTexture(lines: string[]): THREE.CanvasTexture {

@@ -14,6 +14,9 @@ export interface GameEvents {
   steam: THREE.Vector3; // steam vent burst / pressure release
   clank: THREE.Vector3; // metal impact (thrown junk, gates)
   rift: void; // stepping through a temporal rift
+  turn: THREE.Vector3; // a mechanism (mirror) rotated
+  shatter: THREE.Vector3; // glass / crystal cracking
+  draft: void; // the entity blows a cold draft at the flame
 }
 
 type Args<T> = T extends void ? [] : [T];

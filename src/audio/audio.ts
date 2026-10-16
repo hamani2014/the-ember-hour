@@ -36,6 +36,7 @@ export class GameAudio {
   private crackle?: THREE.PositionalAudio;
   private ambience?: THREE.Audio;
   private ambienceKey: SoundKey = 'ambience';
+  private levelLoops: THREE.PositionalAudio[] = [];
 
   // Behaviour timers.
   private lastSteps = 0;
@@ -128,6 +129,9 @@ export class GameAudio {
     events.on('steam', (at) => this.play('hiss', { at, volume: 0.8, rate: rand(0.85, 1.15), refDistance: 2 }));
     events.on('clank', (at) => this.play('clank', { at, volume: 1, rate: rand(0.85, 1.15), refDistance: 2.5 }));
     events.on('rift', () => this.play('rift', { volume: 1 }));
+    events.on('turn', (at) => this.play('clank', { at, volume: 0.45, rate: rand(1.8, 2.2), refDistance: 1.5 }));
+    events.on('shatter', (at) => this.play('shatter', { at, volume: 1, refDistance: 3 }));
+    events.on('draft', () => this.play('gust', { volume: 0.75, rate: rand(0.7, 0.9) }));
     events.on('pickup', () => this.play('rustle', { volume: 0.7 }));
     events.on('refuel', () => {
       this.play('rustle', { volume: 0.5, rate: 0.7 });
@@ -165,6 +169,28 @@ export class GameAudio {
       sound.removeFromParent();
       sound.disconnect();
     });
+  }
+
+  /** A looping 3D sound attached to a level object (e.g. a roaring fire). Stopped automatically on level change. */
+  playLoop(key: SoundKey, attach: THREE.Object3D, volume = 1, refDistance = 2): void {
+    if (!this.ready) return;
+    const sound = new THREE.PositionalAudio(this.listener);
+    sound.setBuffer(this.pick(key));
+    sound.setLoop(true);
+    sound.setVolume(volume);
+    sound.setRefDistance(refDistance);
+    attach.add(sound);
+    sound.play();
+    this.levelLoops.push(sound);
+  }
+
+  stopLevelLoops(): void {
+    for (const sound of this.levelLoops) {
+      if (sound.isPlaying) sound.stop();
+      sound.removeFromParent();
+      sound.disconnect();
+    }
+    this.levelLoops = [];
   }
 
   private pick(key: SoundKey): AudioBuffer {

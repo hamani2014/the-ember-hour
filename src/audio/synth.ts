@@ -19,7 +19,9 @@ export type SoundKey =
   | 'machinery'
   | 'hiss'
   | 'clank'
-  | 'rift';
+  | 'rift'
+  | 'void'
+  | 'shatter';
 
 type Gen = (out: Float32Array, sr: number, rand: () => number) => void;
 
@@ -404,6 +406,38 @@ const rift: Gen = (out, sr, rand) => {
   }
 };
 
+/** The future: a cold, beating high chord over a sub-bass drone, with slow swells of wind. */
+const voidBed: Gen = (out, sr, rand) => {
+  const swell = new Biquad(sr);
+  for (let i = 0; i < out.length; i++) {
+    const t = i / sr;
+    const chord =
+      Math.sin(TAU * 880 * t) * 0.12 +
+      Math.sin(TAU * 883.2 * t) * 0.12 +
+      Math.sin(TAU * 1318.5 * t) * 0.07 * (0.5 + 0.5 * Math.sin(TAU * 0.11 * t)) +
+      Math.sin(TAU * 659.3 * t) * 0.05 * (0.5 + 0.5 * Math.sin(TAU * 0.07 * t + 2));
+    const sub = Math.sin(TAU * 36 * t) * 0.6 + Math.sin(TAU * 36.4 * t) * 0.4;
+    if (i % 64 === 0) swell.bandpass(500 + 400 * Math.sin(TAU * 0.06 * t), 2);
+    const wind = swell.process(noise(rand)) * Math.max(0, Math.sin(TAU * 0.1 * t)) ** 2;
+    out[i] = chord + sub * 0.35 + wind * 1.4;
+  }
+};
+
+/** Crystal cracking apart: a sharp burst and high glassy partials ringing out. */
+const shatter: Gen = (out, sr, rand) => {
+  const hp = new Biquad(sr).highpass(3500);
+  const partials = Array.from({ length: 7 }, () => [2200 + rand() * 4500, 0.05 + rand() * 0.25, 0.3 + rand() * 0.7]);
+  const crackles = Array.from({ length: 14 }, () => [rand() * 0.5, 0.3 + rand() * 0.7]);
+  for (let i = 0; i < out.length; i++) {
+    const t = i / sr;
+    let s = 0;
+    for (const [f, decay, amp] of partials) s += Math.sin(TAU * f * t) * Math.exp(-t / decay) * amp;
+    let grit = Math.exp(-t / 0.015);
+    for (const [at, amp] of crackles) if (t >= at && t < at + 0.01) grit += amp;
+    out[i] = s * 0.3 + hp.process(noise(rand)) * grit;
+  }
+};
+
 /** Build every sound. Keys with several entries are random variations. */
 export function synthesizeAll(ctx: BaseAudioContext): Record<SoundKey, AudioBuffer[]> {
   const variants = (count: number, seconds: (i: number) => number, seed: number, gen: Gen) =>
@@ -425,5 +459,7 @@ export function synthesizeAll(ctx: BaseAudioContext): Record<SoundKey, AudioBuff
     hiss: [render(ctx, 1.6, 14, hiss)],
     clank: variants(3, () => 1.3, 15, clank),
     rift: [render(ctx, 2.2, 16, rift)],
+    void: [render(ctx, 10, 17, voidBed, true)],
+    shatter: [render(ctx, 1.6, 18, shatter)],
   };
 }

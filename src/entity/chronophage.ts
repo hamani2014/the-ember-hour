@@ -40,6 +40,11 @@ const LUNGE_TIME = 1.4;
 const GUST_COST = 10; // fuel ripped away by its shriek
 const DRIFT_SPEED = 0.35; // rad/s it circles to stay behind the player
 const THROW_INTERVAL: [number, number] = [14, 28]; // phase 2+: seconds between hurled junk
+const DRAFT_INTERVAL: [number, number] = [10, 18]; // phase 3+: seconds between cold drafts
+const DRAFT_COST = 6; // fuel a draft blows away
+const CHASE_SPEED = 0.97; // × hunt speed while chasing at mid range (a sprint is 4.4 m/s)
+const CHASE_BAND: [number, number] = [3.5, 6]; // metres: closer → it eases off, further → it surges
+const CHASE_LEASH = 12; // metres — it never falls further behind than this
 
 interface Puff {
   sprite: THREE.Sprite;
@@ -73,6 +78,9 @@ export class Chronophage {
   private huntTimer = 0;
   private lungeTimer = 0;
   private throwTimer = THROW_INTERVAL[0];
+  private draftTimer = DRAFT_INTERVAL[0];
+  /** World position while chasing (scripted escapes); null when orbiting normally. */
+  private chasePos: THREE.Vector3 | null = null;
   private body = new THREE.Group();
   private puffs: Puff[] = [];
   private eyeMaterial: THREE.SpriteMaterial;
@@ -133,6 +141,7 @@ export class Chronophage {
 
   deactivate(): void {
     this.mode = 'dormant';
+    this.chasePos = null;
     this.smothering = false;
     this.group.visible = false;
   }
@@ -145,6 +154,8 @@ export class Chronophage {
     this.huntTimer = 0;
     this.lungeTimer = 0;
     this.throwTimer = THROW_INTERVAL[0];
+    this.draftTimer = DRAFT_INTERVAL[0];
+    this.chasePos = null;
     this.smothering = false;
     if (this.mode !== 'dormant') this.mode = 'lurk';
   }
@@ -173,6 +184,27 @@ export class Chronophage {
     this.tmp.copy(this.group.position).sub(player.feet).setY(0).normalize();
     player.forward(this.facing);
     this.exposed = torch.lit && this.facing.dot(this.tmp) > TORCH_CONE && this.distance < torch.light.distance * 0.85;
+
+    if (this.chasePos) this.chase(dt);
+    else this.stalk(dt);
+
+    // Close enough to smother the flame.
+    this.smothering = this.distance < CATCH_DISTANCE && !this.exposed;
+    if (this.smothering) {
+      torch.spend(SMOTHER_DRAIN * dt);
+      player.shake = Math.max(player.shake, 0.025);
+      if (!torch.lit) {
+        this.mode = 'caught';
+        this.chasePos = null;
+        this.game.caught();
+      }
+    }
+  }
+
+  /** Default behaviour: orbit at a distance that shrinks or grows with what the player does. */
+  private stalk(dt: number): void {
+    const { player, torch } = this.game;
+    const cfg = this.config;
 
     let approach = cfg.creep * 2;
     if (this.mode === 'lunge') {
@@ -209,19 +241,84 @@ export class Chronophage {
       }
     }
 
-    // Unseen, it circles round to stay behind you.
-    if (!this.exposed && this.mode !== 'lunge') this.angle = rotateToward(this.angle, this.behindAngle(), DRIFT_SPEED * dt);
-
-    // Close enough to smother the flame.
-    this.smothering = this.distance < CATCH_DISTANCE && !this.exposed;
-    if (this.smothering) {
-      torch.spend(SMOTHER_DRAIN * dt);
-      player.shake = Math.max(player.shake, 0.025);
-      if (!torch.lit) {
-        this.mode = 'caught';
-        this.game.caught();
+    // From phase 3 it blows cold drafts that knock the flame down.
+    if (this.phase >= 3 && this.distance < 9 && this.mode !== 'lunge') {
+      this.draftTimer -= dt;
+      if (this.draftTimer <= 0) {
+        torch.spend(DRAFT_COST);
+        torch.gutter = 1;
+        this.game.events.emit('draft');
+        this.draftTimer = THREE.MathUtils.randFloat(...DRAFT_INTERVAL);
       }
     }
+
+    // Unseen, it circles round to stay behind you.
+    if (!this.exposed && this.mode !== 'lunge') this.angle = rotateToward(this.angle, this.behindAngle(), DRIFT_SPEED * dt);
+  }
+
+  /**
+   * Chase: a real pursuer in world space, for scripted escapes. Slightly slower than a sprint,
+   * so running keeps you alive and walking doesn't. Torchlight still drives it back.
+   */
+  private chase(dt: number): void {
+    const { player } = this.game;
+    const cfg = this.config;
+    const pos = this.chasePos!;
+    this.mode = this.mode === 'lunge' ? 'lunge' : 'hunt';
+
+    const dx = player.feet.x - pos.x;
+    const dz = player.feet.z - pos.z;
+    const d = Math.max(Math.hypot(dx, dz), 1e-4);
+    if (this.mode === 'lunge') {
+      this.lungeTimer -= dt;
+      if (this.lungeTimer <= 0) this.mode = 'hunt';
+    }
+
+    let speed: number;
+    if (this.mode === 'lunge') speed = cfg.hunt * 1.6;
+    else if (this.exposed) {
+      speed = -PUSH_RATE * 0.7;
+      this.rage += cfg.rage * dt;
+      if (this.rage >= 1) this.lunge();
+    } else {
+      // Rubber-band: it catches up when far back and eases off when close, so a clean sprint
+      // keeps it a few metres behind — and any stumble lets it reach you.
+      const band = d > CHASE_BAND[1] ? 1.1 : d > CHASE_BAND[0] ? CHASE_SPEED : 0.9;
+      speed = cfg.hunt * band;
+    }
+
+    const step = Math.min(speed * dt, d - MIN_DISTANCE);
+    pos.x += (dx / d) * step;
+    pos.z += (dz / d) * step;
+
+    // Never fall hopelessly behind — it's always right there in the dark.
+    const nd = Math.hypot(player.feet.x - pos.x, player.feet.z - pos.z);
+    if (nd > CHASE_LEASH) {
+      pos.x = player.feet.x - ((player.feet.x - pos.x) / nd) * CHASE_LEASH;
+      pos.z = player.feet.z - ((player.feet.z - pos.z) / nd) * CHASE_LEASH;
+    }
+    this.distance = Math.max(MIN_DISTANCE, Math.hypot(player.feet.x - pos.x, player.feet.z - pos.z));
+    this.angle = Math.atan2(pos.z - player.feet.z, pos.x - player.feet.x);
+  }
+
+  get chasing(): boolean {
+    return this.chasePos !== null;
+  }
+
+  /** Start a world-space pursuit from `distance` metres behind the player. */
+  startChase(distance = 9): void {
+    if (this.mode === 'dormant') return;
+    const a = this.behindAngle();
+    const feet = this.game.player.feet;
+    this.chasePos = new THREE.Vector3(feet.x + Math.cos(a) * distance, 0, feet.z + Math.sin(a) * distance);
+    this.rage = 0;
+    this.mode = 'hunt';
+  }
+
+  stopChase(): void {
+    this.chasePos = null;
+    if (this.mode === 'hunt') this.mode = 'lurk';
+    this.desired = this.distance;
   }
 
   private lunge(): void {
