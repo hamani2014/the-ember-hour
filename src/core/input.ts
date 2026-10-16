@@ -22,8 +22,11 @@ export class Input {
     });
   }
 
+  /** Dev/testing: treat the game as active without pointer lock (set via `?debug` URL flag). */
+  forceActive = false;
+
   get locked(): boolean {
-    return document.pointerLockElement === this.canvas;
+    return this.forceActive || document.pointerLockElement === this.canvas;
   }
 
   isDown(code: string): boolean {
