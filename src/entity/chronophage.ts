@@ -64,6 +64,8 @@ export class Chronophage {
   rage = 0;
   /** True while the torch is pointed at it this frame. */
   exposed = false;
+  /** True while it's wrapped around the player draining the flame. */
+  smothering = false;
   private desired = 9;
   private angle = 0;
   private huntTimer = 0;
@@ -123,10 +125,12 @@ export class Chronophage {
     this.group.visible = true;
     this.body.scale.setScalar(this.config.scale);
     this.reset(distance);
+    this.game.events.emit('wake');
   }
 
   deactivate(): void {
     this.mode = 'dormant';
+    this.smothering = false;
     this.group.visible = false;
   }
 
@@ -137,6 +141,7 @@ export class Chronophage {
     this.rage = 0;
     this.huntTimer = 0;
     this.lungeTimer = 0;
+    this.smothering = false;
     if (this.mode !== 'dormant') this.mode = 'lurk';
   }
 
@@ -190,7 +195,8 @@ export class Chronophage {
     if (!this.exposed && this.mode !== 'lunge') this.angle = rotateToward(this.angle, this.behindAngle(), DRIFT_SPEED * dt);
 
     // Close enough to smother the flame.
-    if (this.distance < CATCH_DISTANCE && !this.exposed) {
+    this.smothering = this.distance < CATCH_DISTANCE && !this.exposed;
+    if (this.smothering) {
       torch.spend(SMOTHER_DRAIN * dt);
       player.shake = Math.max(player.shake, 0.025);
       if (!torch.lit) {
@@ -206,6 +212,7 @@ export class Chronophage {
     this.rage = 0;
     this.game.torch.spend(GUST_COST);
     this.game.player.shake = 0.09;
+    this.game.events.emit('lunge');
   }
 
   private place(): void {

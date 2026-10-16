@@ -58,6 +58,7 @@ export function createBurnPoint(game: Game, o: BurnPointOptions): void {
         fire.group.visible = true;
         flare = 0.6;
         game.embers.emit(o.flamePosition, 25, 0.1, 1.2);
+        game.events.emit('ignite', o.flamePosition);
         o.onLit?.();
         return;
       }
@@ -80,6 +81,7 @@ export function createBurnPoint(game: Game, o: BurnPointOptions): void {
       if (child instanceof THREE.Mesh) child.material = (child.material as THREE.Material).clone();
     });
     game.world.add(item);
+    game.events.emit('burn', o.flamePosition);
 
     game.tweens.add(
       1.8,

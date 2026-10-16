@@ -1,0 +1,354 @@
+/**
+ * Procedural placeholder sounds, synthesised sample-by-sample at startup.
+ * Any of these can be replaced by dropping `public/assets/audio/<key>.mp3` into the project (see audio.ts).
+ */
+
+export type SoundKey =
+  | 'ambience'
+  | 'crackle'
+  | 'whisper'
+  | 'thud'
+  | 'step'
+  | 'heartbeat'
+  | 'shriek'
+  | 'whoosh'
+  | 'gust'
+  | 'rustle'
+  | 'creak'
+  | 'burn';
+
+type Gen = (out: Float32Array, sr: number, rand: () => number) => void;
+
+const TAU = Math.PI * 2;
+
+function rng(seed: number): () => number {
+  let s = seed % 2147483647 || 1;
+  return () => (s = (s * 16807) % 2147483647) / 2147483647;
+}
+
+/** RBJ biquad filter. Call a setter (can be re-called per block for sweeps), then `process` per sample. */
+class Biquad {
+  private b0 = 1;
+  private b1 = 0;
+  private b2 = 0;
+  private a1 = 0;
+  private a2 = 0;
+  private x1 = 0;
+  private x2 = 0;
+  private y1 = 0;
+  private y2 = 0;
+
+  constructor(private sr: number) {}
+
+  bandpass(f: number, q: number): this {
+    const w = (TAU * f) / this.sr;
+    const al = Math.sin(w) / (2 * q);
+    const a0 = 1 + al;
+    return this.set(al / a0, 0, -al / a0, (-2 * Math.cos(w)) / a0, (1 - al) / a0);
+  }
+
+  lowpass(f: number, q = 0.707): this {
+    const w = (TAU * f) / this.sr;
+    const al = Math.sin(w) / (2 * q);
+    const c = Math.cos(w);
+    const a0 = 1 + al;
+    return this.set((1 - c) / 2 / a0, (1 - c) / a0, (1 - c) / 2 / a0, (-2 * c) / a0, (1 - al) / a0);
+  }
+
+  highpass(f: number, q = 0.707): this {
+    const w = (TAU * f) / this.sr;
+    const al = Math.sin(w) / (2 * q);
+    const c = Math.cos(w);
+    const a0 = 1 + al;
+    return this.set((1 + c) / 2 / a0, -(1 + c) / a0, (1 + c) / 2 / a0, (-2 * c) / a0, (1 - al) / a0);
+  }
+
+  process(x: number): number {
+    const y = this.b0 * x + this.b1 * this.x1 + this.b2 * this.x2 - this.a1 * this.y1 - this.a2 * this.y2;
+    this.x2 = this.x1;
+    this.x1 = x;
+    this.y2 = this.y1;
+    this.y1 = y;
+    return y;
+  }
+
+  private set(b0: number, b1: number, b2: number, a1: number, a2: number): this {
+    this.b0 = b0;
+    this.b1 = b1;
+    this.b2 = b2;
+    this.a1 = a1;
+    this.a2 = a2;
+    return this;
+  }
+}
+
+/** Render a generator into a mono AudioBuffer, peak-normalised. Loops get a seamless crossfade at the seam. */
+function render(ctx: BaseAudioContext, seconds: number, seed: number, gen: Gen, loop = false): AudioBuffer {
+  const sr = ctx.sampleRate;
+  const n = Math.floor(seconds * sr);
+  const fade = loop ? Math.floor(sr * 0.5) : 0;
+  const data = new Float32Array(n + fade);
+  gen(data, sr, rng(seed));
+
+  if (loop) {
+    for (let i = 0; i < fade; i++) {
+      const k = i / fade;
+      data[i] = data[i] * k + data[n + i] * (1 - k);
+    }
+  } else {
+    const tail = Math.min(512, n);
+    for (let i = 0; i < tail; i++) data[n - 1 - i] *= i / tail;
+  }
+
+  let peak = 1e-6;
+  for (let i = 0; i < n; i++) peak = Math.max(peak, Math.abs(data[i]));
+  const gain = 0.9 / peak;
+  const buffer = ctx.createBuffer(1, n, sr);
+  const channel = buffer.getChannelData(0);
+  for (let i = 0; i < n; i++) channel[i] = data[i] * gain;
+  return buffer;
+}
+
+const noise = (rand: () => number) => rand() * 2 - 1;
+
+// --- Generators -------------------------------------------------------------
+
+/** Low drone with slow beating + moaning wind. */
+const ambience: Gen = (out, sr, rand) => {
+  const wind = new Biquad(sr);
+  for (let i = 0; i < out.length; i++) {
+    const t = i / sr;
+    const drone =
+      Math.sin(TAU * 55 * t) * 0.5 +
+      Math.sin(TAU * 55.35 * t) * 0.4 +
+      Math.sin(TAU * 82.4 * t) * 0.25 * (0.5 + 0.5 * Math.sin(TAU * 0.07 * t)) +
+      Math.sin(TAU * 110.6 * t) * 0.08;
+    if (i % 64 === 0) wind.bandpass(350 + 250 * Math.sin(TAU * 0.05 * t) + 120 * Math.sin(TAU * 0.13 * t), 1.4);
+    const w = wind.process(noise(rand)) * (0.55 + 0.45 * Math.sin(TAU * 0.09 * t + 1));
+    out[i] = drone * 0.3 + w * 1.1;
+  }
+};
+
+/** Torch fire: soft roar plus random pops and snaps. */
+const crackle: Gen = (out, sr, rand) => {
+  const roar = new Biquad(sr).lowpass(380);
+  const popHp = new Biquad(sr).highpass(1800);
+  const snapHp = new Biquad(sr).highpass(900);
+  const popDecay = Math.exp(-1 / (sr * 0.004));
+  const snapDecay = Math.exp(-1 / (sr * 0.014));
+  let pop = 0;
+  let popAmp = 0;
+  let snap = 0;
+  let snapAmp = 0;
+  for (let i = 0; i < out.length; i++) {
+    const t = i / sr;
+    const w = noise(rand);
+    if (rand() < 16 / sr) {
+      pop = 1;
+      popAmp = 0.2 + rand() * 0.8;
+    }
+    if (rand() < 1.2 / sr) {
+      snap = 1;
+      snapAmp = 0.6 + rand() * 0.4;
+    }
+    pop *= popDecay;
+    snap *= snapDecay;
+    const body = roar.process(w) * (0.6 + 0.25 * Math.sin(TAU * 0.7 * t) + 0.15 * Math.sin(TAU * 2.3 * t));
+    out[i] = body * 1.6 + popHp.process(w) * pop * popAmp + snapHp.process(w) * snap * snapAmp * 1.3;
+  }
+};
+
+/** Breathy, unintelligible whispering: formant-filtered noise shaped into syllables. */
+const whisper: Gen = (out, sr, rand) => {
+  const duration = out.length / sr;
+  const f1 = new Biquad(sr);
+  const f2 = new Biquad(sr);
+  const hp = new Biquad(sr).highpass(450);
+  const syllables: { start: number; len: number; a: number; b: number; amp: number }[] = [];
+  for (let t = 0.05; t < duration - 0.25; ) {
+    const len = 0.07 + rand() * 0.17;
+    const sibilant = rand() < 0.2;
+    syllables.push({
+      start: t,
+      len,
+      a: sibilant ? 3600 : 550 + rand() * 900,
+      b: sibilant ? 6200 : 1500 + rand() * 1500,
+      amp: 0.4 + rand() * 0.6,
+    });
+    t += len + (rand() < 0.25 ? 0.15 + rand() * 0.25 : 0.02 + rand() * 0.05);
+  }
+  let s = 0;
+  for (let i = 0; i < out.length; i++) {
+    const t = i / sr;
+    while (s < syllables.length - 1 && t > syllables[s].start + syllables[s].len) s++;
+    const syl = syllables[s];
+    const local = (t - syl.start) / syl.len;
+    const env = local >= 0 && local <= 1 ? Math.pow(Math.sin(Math.PI * local), 0.7) * syl.amp : 0;
+    if (i % 32 === 0) {
+      f1.bandpass(syl.a * (1 + 0.2 * Math.max(0, Math.min(local, 1))), 5);
+      f2.bandpass(syl.b * (1 - 0.1 * Math.max(0, Math.min(local, 1))), 6);
+    }
+    const x = noise(rand);
+    out[i] = hp.process(f1.process(x) * 0.8 + f2.process(x) * 0.6) * (env + 0.03);
+  }
+};
+
+/** Heavy, soft footfall — the entity walking. */
+const thud: Gen = (out, sr, rand) => {
+  const lp = new Biquad(sr).lowpass(240, 1);
+  const hp = new Biquad(sr).highpass(2000);
+  let phase = 0;
+  for (let i = 0; i < out.length; i++) {
+    const t = i / sr;
+    phase += (TAU * (52 + 45 * Math.exp(-t / 0.03))) / sr;
+    const w = noise(rand);
+    const body = Math.sin(phase) * Math.exp(-t / 0.09);
+    const dirt = lp.process(w) * Math.exp(-t / 0.06) * 3;
+    const scuff = hp.process(w) * Math.exp(-t / 0.012) * 0.25;
+    out[i] = body * 0.8 + dirt + scuff;
+  }
+};
+
+/** The player's own lighter footstep. */
+const step: Gen = (out, sr, rand) => {
+  const lp = new Biquad(sr).lowpass(1100, 0.9);
+  for (let i = 0; i < out.length; i++) {
+    const t = i / sr;
+    out[i] = lp.process(noise(rand)) * (Math.exp(-t / 0.025) + 0.3 * Math.exp(-Math.abs(t - 0.04) / 0.01));
+  }
+};
+
+/** Lub-dub. */
+const heartbeat: Gen = (out, sr) => {
+  const lp = new Biquad(sr).lowpass(160);
+  const beat = (t: number, start: number, amp: number, phase: { v: number }) => {
+    const local = t - start;
+    if (local < 0) return 0;
+    phase.v += (TAU * (46 + 34 * Math.exp(-local / 0.02))) / sr;
+    return Math.sin(phase.v) * Math.exp(-local / 0.07) * amp;
+  };
+  const p1 = { v: 0 };
+  const p2 = { v: 0 };
+  for (let i = 0; i < out.length; i++) {
+    const t = i / sr;
+    out[i] = lp.process(beat(t, 0, 1, p1) + beat(t, 0.17, 0.65, p2));
+  }
+};
+
+/** Detuned screeching saws sliding down through distortion. */
+const shriek: Gen = (out, sr, rand) => {
+  const duration = out.length / sr;
+  const bp = new Biquad(sr).bandpass(2600, 2.5);
+  const lp = new Biquad(sr).lowpass(6500);
+  const phases = [0, 0, 0, 0, 0];
+  for (let i = 0; i < out.length; i++) {
+    const t = i / sr;
+    let saw = 0;
+    phases.forEach((_, k) => {
+      const f = 880 * (1 + 0.035 * k) * (1.35 - (0.65 * t) / duration) * (1 + 0.05 * Math.sin(TAU * (6.5 + k) * t));
+      phases[k] = (phases[k] + f / sr) % 1;
+      saw += phases[k] * 2 - 1;
+    });
+    const env = Math.min(1, t / 0.025) * Math.exp(-t / 0.55);
+    out[i] = lp.process(Math.tanh(2.6 * (saw * 0.22 + bp.process(noise(rand)) * 0.7)) * env);
+  }
+};
+
+/** Air rushing into a flame. */
+const whoosh: Gen = (out, sr, rand) => {
+  const duration = out.length / sr;
+  const lp = new Biquad(sr);
+  for (let i = 0; i < out.length; i++) {
+    const k = i / sr / duration;
+    if (i % 32 === 0) lp.lowpass(200 + 3800 * Math.sin(Math.PI * k) ** 2, 1.2);
+    out[i] = lp.process(noise(rand)) * Math.sin(Math.PI * k) ** 1.5;
+  }
+};
+
+/** A cold draft trying to snuff the torch. */
+const gust: Gen = (out, sr, rand) => {
+  const duration = out.length / sr;
+  const bp = new Biquad(sr);
+  const rumble = new Biquad(sr).lowpass(120);
+  for (let i = 0; i < out.length; i++) {
+    const k = i / sr / duration;
+    if (i % 32 === 0) bp.bandpass(300 + 900 * Math.sin(Math.PI * k), 1.5);
+    const w = noise(rand);
+    out[i] = (bp.process(w) + rumble.process(w) * 2) * Math.sin(Math.PI * k) ** 0.8;
+  }
+};
+
+/** Paper / cloth being handled. */
+const rustle: Gen = (out, sr, rand) => {
+  const hp = new Biquad(sr).highpass(2400);
+  const bumps = Array.from({ length: 6 }, () => ({ at: rand() * 0.35, len: 0.015 + rand() * 0.04, amp: 0.4 + rand() * 0.6 }));
+  for (let i = 0; i < out.length; i++) {
+    const t = i / sr;
+    let env = 0;
+    for (const b of bumps) if (t >= b.at && t < b.at + b.len) env += Math.sin((Math.PI * (t - b.at)) / b.len) * b.amp;
+    out[i] = hp.process(noise(rand)) * env;
+  }
+};
+
+/** Floorboard creak: a stick-slip impulse train through wooden resonances. */
+const creak: Gen = (out, sr, rand) => {
+  const duration = out.length / sr;
+  const r1 = new Biquad(sr).bandpass(650 + rand() * 200, 9);
+  const r2 = new Biquad(sr).bandpass(1400 + rand() * 300, 7);
+  const r3 = new Biquad(sr).bandpass(320, 4);
+  const base = 70 + rand() * 50;
+  let phase = 0;
+  for (let i = 0; i < out.length; i++) {
+    const k = i / sr / duration;
+    const f = base + 160 * Math.sin(Math.PI * k) * (0.8 + 0.2 * Math.sin(TAU * 3 * k));
+    phase += f / sr;
+    let impulse = 0;
+    if (phase >= 1) {
+      phase -= 1 + (rand() - 0.5) * 0.3; // friction jitter
+      impulse = rand() < 0.9 ? 0.5 + rand() * 0.5 : 0;
+    }
+    const env = Math.sin(Math.PI * k) ** 0.5;
+    out[i] = (r1.process(impulse) + r2.process(impulse) * 0.5 + r3.process(impulse) * 0.6) * env;
+  }
+};
+
+/** Paper catching and burning away: whoosh into dense, dying crackle. */
+const burn: Gen = (out, sr, rand) => {
+  const lp = new Biquad(sr);
+  const hp = new Biquad(sr).highpass(1500);
+  const popDecay = Math.exp(-1 / (sr * 0.005));
+  let pop = 0;
+  let popAmp = 0;
+  for (let i = 0; i < out.length; i++) {
+    const t = i / sr;
+    if (i % 32 === 0) lp.lowpass(300 + 2500 * Math.exp(-t / 0.4), 1);
+    const w = noise(rand);
+    const life = Math.exp(-t / 0.9);
+    if (rand() < (45 * life) / sr) {
+      pop = 1;
+      popAmp = 0.3 + rand() * 0.7;
+    }
+    pop *= popDecay;
+    out[i] = lp.process(w) * Math.min(1, t / 0.08) * life * 1.4 + hp.process(w) * pop * popAmp;
+  }
+};
+
+/** Build every sound. Keys with several entries are random variations. */
+export function synthesizeAll(ctx: BaseAudioContext): Record<SoundKey, AudioBuffer[]> {
+  const variants = (count: number, seconds: (i: number) => number, seed: number, gen: Gen) =>
+    Array.from({ length: count }, (_, i) => render(ctx, seconds(i), seed + i * 101, gen));
+  return {
+    ambience: [render(ctx, 12, 1, ambience, true)],
+    crackle: [render(ctx, 6, 2, crackle, true)],
+    whisper: variants(5, (i) => 1.4 + i * 0.25, 3, whisper),
+    thud: variants(3, () => 0.4, 4, thud),
+    step: variants(4, () => 0.16, 5, step),
+    heartbeat: [render(ctx, 0.6, 6, heartbeat)],
+    shriek: [render(ctx, 1.6, 7, shriek)],
+    whoosh: [render(ctx, 0.9, 8, whoosh)],
+    gust: [render(ctx, 1.3, 9, gust)],
+    rustle: variants(2, () => 0.45, 10, rustle),
+    creak: variants(4, (i) => 0.7 + i * 0.15, 11, creak),
+    burn: [render(ctx, 2.4, 12, burn)],
+  };
+}

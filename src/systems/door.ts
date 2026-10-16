@@ -46,6 +46,7 @@ export function createBoardedDoor(game: Game, o: BoardedDoorOptions): BoardedDoo
     dissolve(onDone) {
       if (open) return;
       open = true;
+      game.events.emit('door', o.center.clone().setY(o.height / 2));
       planks.forEach((plank, i) => {
         const mat = plank.material as THREE.MeshLambertMaterial;
         const startY = plank.position.y;

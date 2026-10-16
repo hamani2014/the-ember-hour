@@ -25,6 +25,8 @@ export class PlayerController {
   bob = 0;
   /** Camera shake strength (radians); decays automatically. */
   shake = 0;
+  /** Increments once per footfall (audio listens to this). */
+  steps = 0;
   private bobPhase = 0;
   private wish = new THREE.Vector3();
 
@@ -76,7 +78,10 @@ export class PlayerController {
     this.state = speed < 0.3 ? 'still' : sprinting && speed > WALK_SPEED * 1.1 ? 'sprint' : 'walk';
     this.noise = this.state === 'sprint' ? 1 : this.state === 'walk' ? 0.25 : 0;
 
+    const stepBefore = Math.floor(this.bobPhase / Math.PI - 0.75);
     this.bobPhase += speed * dt * 2.4;
+    // A footfall lands at each bottom of the head bob.
+    if (this.state !== 'still' && Math.floor(this.bobPhase / Math.PI - 0.75) !== stepBefore) this.steps++;
     this.bob = Math.sin(this.bobPhase * 2) * 0.03 * Math.min(speed / WALK_SPEED, 1.6);
     this.shake = Math.max(0, this.shake - dt * 0.15);
     this.applyCamera();

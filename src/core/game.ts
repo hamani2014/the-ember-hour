@@ -11,6 +11,8 @@ import { Interaction } from '../systems/interaction';
 import { PlayerController } from '../player/controller';
 import { Torch } from '../player/torch';
 import { Chronophage } from '../entity/chronophage';
+import { GameAudio } from '../audio/audio';
+import { Events, type GameEvents } from './events';
 
 /** Fuel the torch is topped up to after being caught. */
 const RESPAWN_FUEL = 50;
@@ -32,6 +34,8 @@ export class Game {
   readonly player: PlayerController;
   readonly torch: Torch;
   readonly entity: Chronophage;
+  readonly audio: GameAudio;
+  readonly events = new Events<GameEvents>();
   /** Where the player wakes up after the shadow takes them. Levels move this forward. */
   checkpoint = { x: 0, z: 0, yaw: 0 };
   private updaters: UpdateFn[] = [];
@@ -50,10 +54,14 @@ export class Game {
 
     this.player = new PlayerController(this.camera, this.input, this.collision);
     this.torch = new Torch(this.camera);
-    this.torch.onExtinguish = () => this.hud.say('The flame is out… I need something to burn.');
+    this.torch.onExtinguish = () => {
+      this.hud.say('The flame is out… I need something to burn.');
+      this.events.emit('extinguish');
+    };
     this.interaction = new Interaction(this.world, this.camera, this.input, this.hud);
     this.inventory.onChange = () => this.hud.setHeld(this.inventory.clues.map((c) => c.name));
     this.entity = new Chronophage(this);
+    this.audio = new GameAudio(this);
   }
 
   setCheckpoint(x: number, z: number, yaw: number): void {
@@ -64,6 +72,7 @@ export class Game {
   caught(): void {
     this.hud.fade(1, 0.6);
     this.player.shake = 0.12;
+    this.events.emit('caught');
     this.tweens.delay(1.6, () => {
       const { x, z, yaw } = this.checkpoint;
       this.player.spawn(x, z, yaw);
@@ -83,7 +92,9 @@ export class Game {
     startLoop((dt, t) => {
       const playing = this.input.locked;
       this.hud.setPaused(!playing);
+      this.audio.setRunning(playing);
       if (playing) {
+        this.audio.update(dt);
         this.player.update(dt);
         this.torch.update(dt, t, this.player.state, this.player.bob);
         this.entity.update(dt, t);

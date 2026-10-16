@@ -11,6 +11,7 @@ export function createClue(game: Game, o: { id: string; name: string; object: TH
       game.interaction.unregister(item);
       o.object.removeFromParent();
       game.inventory.add({ id: o.id, name: o.name, object: o.object });
+      game.events.emit('pickup');
       if (o.thought) game.hud.say(o.thought);
       o.onTake?.();
     },
@@ -29,6 +30,7 @@ export function createFuel(game: Game, o: { object: THREE.Object3D; amount: numb
       game.embers.emit(at, 20, 0.2, 1);
       o.object.removeFromParent();
       game.torch.refuel(o.amount);
+      game.events.emit('refuel');
     },
   });
 }
