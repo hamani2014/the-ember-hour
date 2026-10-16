@@ -32,7 +32,8 @@ export class GameAudio {
   readonly listener = new THREE.AudioListener();
   private bank = new Map<SoundKey, AudioBuffer[]>();
   private ready = false;
-  private wantRunning = false;
+  // Starts "true" so the first setRunning(false) on the title screen actually suspends audio.
+  private wantRunning = true;
   private crackle?: THREE.PositionalAudio;
   private ambience?: THREE.Audio;
   private ambienceKey: SoundKey = 'ambience';
