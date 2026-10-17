@@ -10,6 +10,7 @@ import { createSwingDoor } from '../systems/door';
 import { createHearth } from '../systems/hearth';
 import { createNote } from '../systems/notes';
 import { box, plane, room } from './builder';
+import { createTesseract } from './tesseract';
 
 /** Seconds from the ritual starting until the sun crests. */
 const DAWN_TIME = 240;
@@ -366,7 +367,9 @@ export function buildAct4Basilica(game: Game): void {
     sun.target.position.set(STREET_X, 0, -30);
     game.world.add(ambient, sun, sun.target);
     game.audio.stopAmbience();
+    return { ambient, sun, sky, fogFar: harsh ? 70 : 85, ambientLevel: ambient.intensity, sunLevel: sun.intensity };
   };
+  const tesseract = createTesseract(game);
 
   const look = (from: THREE.Vector3, at: THREE.Vector3, roll = 0) => {
     game.camera.position.copy(from);
@@ -473,6 +476,7 @@ export function buildAct4Basilica(game: Game): void {
   game.camera.add(hands);
 
   const endingB = () => {
+    let outside: ReturnType<typeof goOutside> | null = null;
     ended = true;
     game.hud.setDawn(null);
     beginCutscene(game);
@@ -516,7 +520,7 @@ export function buildAct4Basilica(game: Game): void {
         {
           duration: 5,
           start: () => {
-            goOutside(true);
+            outside = goOutside(true);
             arriving.visible = true;
             game.hud.fade(0, 3);
             game.tweens.delay(1.2, () => game.hud.say('Daylight. It’s over… isn’t it?', 3.5));
@@ -535,6 +539,24 @@ export function buildAct4Basilica(game: Game): void {
             look(steps, new THREE.Vector3(STREET_X, 1.6, -40).lerp(figure, ease(Math.min(1, k * 2))));
           },
         },
+        // He sees himself from every angle at once — the tesseract.
+        ...tesseract.shots({
+          enter: () => {
+            if (outside) outside.ambient.intensity = outside.sun.intensity = 0;
+            game.scene.background = new THREE.Color(0x000000);
+            game.scene.fog = new THREE.Fog(0x000000, 12, 60);
+          },
+          exit: () => {
+            if (outside) {
+              outside.ambient.intensity = outside.ambientLevel;
+              outside.sun.intensity = outside.sunLevel;
+              game.scene.background = new THREE.Color(outside.sky);
+              game.scene.fog = new THREE.Fog(outside.sky, 8, outside.fogFar);
+            }
+            game.audio.stopAmbience();
+            game.hud.fade(0, 1.0);
+          },
+        }),
         {
           duration: 6.5,
           start: () => {

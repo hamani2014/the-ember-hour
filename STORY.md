@@ -21,7 +21,11 @@ Julian drives into the Vale with a three-year-old letter signed only **"A."** �
 ## The endings
 
 - **Ending A — The Loop** (rite finished before dawn): the shadow shatters, morning, birdsong… a sharp pain, black, and Julian wakes on the asphalt beside his car as the engine dies. Again. *(The rite only decides who carries the light next.)*
-- **Ending B — The Eclipse of Self** (dawn comes first): the sun turns the shadow to obsidian; outside, Julian sees himself arriving with a torch — and his hands bleed into darkness. He didn't drive it out. He became it.
+- **Ending B — The Eclipse of Self** (dawn comes first): the sun turns the shadow to obsidian; outside, Julian sees himself arriving with a torch — *"…that's me."* Reality fractures into a **tesseract**: an endless lattice of golden lines and floating windows, each a live view of Julian at another moment of the night (the car in the rain, the Archive bulletin board, the boiler room burners, the observatory mirrors, the basilica brazier), watched from the dark the way the shadow watched him. The camera pushes into the last window — the car, the beginning — and his hands bleed into darkness. He didn't drive it out. He became it.
+
+## The Chronophage's three faces
+
+It is never quite the same thing twice. Each time the player turns and catches sight of it, it has changed while unseen: **the Wraith** (a tall soot figure with one pale, half-formed face) → **the Thirty-One** (low and crawling, many small faces of the dead night shift pressed into it) → **the Hour** (impossibly thin and tall, a cracked clock face stopped at 3:17, furnace light leaking through) → the Wraith again.
 
 ## Where the player finds each piece
 
