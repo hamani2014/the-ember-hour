@@ -93,7 +93,7 @@ export function buildMeridianChamber(game: Game): void {
   pedestal.userData.noHit = true;
   drive.position.set(2.5, 0.95, -27.4);
   game.world.add(drive);
-  createClue(game, { id: 'expedition-drive', name: 'Expedition Drive', object: drive, doc: 'expeditionDrive', thought: '"By car, at night, in the rain." …No. That\u2019s not—' });
+  createClue(game, { id: 'expedition-drive', name: 'Expedition Drive', object: drive, doc: 'expeditionDrive' });
 
   // Brazier on the far landing; the energy bridge beyond it.
   const brazier = new THREE.Group();
@@ -119,7 +119,6 @@ export function buildMeridianChamber(game: Game): void {
     lit: true,
     flameSize: 1.6,
     onBurn: () => {
-      game.hud.say('The circuits are burning— the light is holding together. A bridge!');
       game.tweens.add(1.2, (k) => bridge.scale.set(1, 1, Math.max(0.001, k)), () => {
         bridgeUp = true;
         game.collision.remove(barrier);
@@ -147,7 +146,6 @@ export function buildMeridianChamber(game: Game): void {
         game.controlsLocked = false;
         if (game.entity.mode !== 'dormant') game.entity.reset();
         game.hud.fade(0, 1);
-        game.hud.say('…The stone held me. Again.', 2.5);
         falling = false;
       },
     );

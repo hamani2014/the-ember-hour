@@ -274,9 +274,6 @@ export function createTesseract(game: Game): Tesseract {
             cam.updateProjectionMatrix();
             game.hud.fade(0, 1.8);
             game.audio.setAmbience('void', 0.6);
-            game.tweens.delay(1.5, () => game.hud.say('I can see it all. All at once.', 3.5));
-            game.tweens.delay(5.5, () => game.hud.say('Every room. Every hour. Every time I came here.', 3.5));
-            game.tweens.delay(9.5, () => game.hud.say('Watching myself… from the dark.', 3.2));
           },
           update: (k) => {
             cam.position.set(TX + Math.sin(k * 5) * 0.25, 1.0 + Math.sin(k * 3) * 0.3, 2 - 31 * ease(k));

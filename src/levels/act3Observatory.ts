@@ -349,7 +349,6 @@ export function buildAct3Observatory(game: Game): void {
             if (i === slabs.length - 1) {
               game.collision.remove(abyssBarrier);
               game.setCheckpoint(0, -8, 0);
-              game.hud.say('A way across. Don’t look down.');
             }
           },
         ),
@@ -550,7 +549,7 @@ export function buildAct3Observatory(game: Game): void {
     if (feet.z < CORRIDOR_END + 2.4) {
       escaped = true;
       entity.deactivate();
-      timeTravel(game, 'act4', 'Through the fire—');
+      timeTravel(game, 'act4');
     }
   });
 

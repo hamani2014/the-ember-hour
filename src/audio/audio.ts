@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { Game } from '../core/game';
 import { synthesizeAll, type SoundKey } from './synth';
+import { Voice } from './voice';
 
 export interface PlayOptions {
   volume?: number;
@@ -16,6 +17,13 @@ export interface PlayOptions {
 
 /** Real recordings dropped into src/assets/audio/<key>.mp3 replace the procedural placeholders. */
 const OVERRIDES = import.meta.glob<string>('../assets/audio/*.mp3', { eager: true, query: '?url', import: 'default' });
+/** Recorded effects with no procedural version: src/assets/audio/sfx/<key>.mp3. */
+const SFX = import.meta.glob<string>('../assets/audio/sfx/*.mp3', { eager: true, query: '?url', import: 'default' });
+type SfxKey = 'entityAttack' | 'entityCreep' | 'entityLook' | 'playerWalk' | 'playerRun';
+export type AudioKey = SoundKey | SfxKey;
+
+/** The entity's recorded sounds sit a little above everything else in the mix. */
+const ENTITY_GAIN = 1.5;
 
 const lerp = THREE.MathUtils.lerp;
 const clamp = THREE.MathUtils.clamp;
@@ -30,7 +38,8 @@ const rand = (min: number, max: number) => min + Math.random() * (max - min);
  */
 export class GameAudio {
   readonly listener = new THREE.AudioListener();
-  private bank = new Map<SoundKey, AudioBuffer[]>();
+  private bank = new Map<AudioKey, AudioBuffer[]>();
+  readonly voice: Voice;
   private ready = false;
   // Starts "true" so the first setRunning(false) on the title screen actually suspends audio.
   private wantRunning = true;
@@ -50,10 +59,16 @@ export class GameAudio {
   private heartTimer = 0;
   private creakTimer = 6;
   private smotherTimer = 0;
+  private creepTimer = 10;
+  private lastAttackSound = -10;
+  private walkLoop?: THREE.Audio;
+  private runLoop?: THREE.Audio;
 
   constructor(private game: Game) {
     game.camera.add(this.listener);
     this.listener.setMasterVolume(0.9);
+    this.voice = new Voice(this.listener);
+    game.hud.speak = (text, start) => this.voice.speak(text, start);
     void this.init();
   }
 
@@ -63,7 +78,10 @@ export class GameAudio {
 
   private async init(): Promise<void> {
     for (const [key, buffers] of Object.entries(synthesizeAll(this.ctx))) this.bank.set(key as SoundKey, buffers);
-    await Promise.all([...this.bank.keys()].map((key) => this.loadOverride(key)));
+    await Promise.all([
+      ...[...this.bank.keys()].map((key) => this.loadOverride(key as SoundKey)),
+      ...Object.entries(SFX).map(([path, url]) => this.loadFile(path.replace(/^.*\/|\.mp3$/g, '') as SfxKey, url)),
+    ]);
 
     this.ambience = new THREE.Audio(this.listener);
     this.ambience.setLoop(true);
@@ -81,6 +99,19 @@ export class GameAudio {
     crackle.play();
     this.crackle = crackle;
 
+    // Footsteps: recorded walking / running loops, faded in and out with the player's pace.
+    const footLoop = (key: SfxKey) => {
+      if (!this.bank.has(key)) return undefined;
+      const loop = new THREE.Audio(this.listener);
+      loop.setBuffer(this.pick(key));
+      loop.setLoop(true);
+      loop.setVolume(0);
+      loop.play();
+      return loop;
+    };
+    this.walkLoop = footLoop('playerWalk');
+    this.runLoop = footLoop('playerRun');
+
     this.bindEvents();
   }
 
@@ -97,7 +128,10 @@ export class GameAudio {
   /** Use a real recording from src/assets/audio if one exists (found at build time, so no failed requests). */
   private async loadOverride(key: SoundKey): Promise<void> {
     const url = OVERRIDES[`../assets/audio/${key}.mp3`];
-    if (!url) return;
+    if (url) await this.loadFile(key, url);
+  }
+
+  private async loadFile(key: AudioKey, url: string): Promise<void> {
     try {
       const res = await fetch(url);
       this.bank.set(key, [await this.ctx.decodeAudioData(await res.arrayBuffer())]);
@@ -113,9 +147,10 @@ export class GameAudio {
       this.whisperTimer = 2.5;
     });
     events.on('lunge', () => {
-      this.play('shriek', { attach: entity.group, offset: new THREE.Vector3(0, 2, 0), volume: 1, refDistance: 4 });
+      this.entityAttack();
       this.play('gust', { volume: 0.8 });
     });
+    events.on('close', () => this.entityAttack());
     events.on('caught', () => {
       this.play('shriek', { volume: 0.7, rate: 0.55 });
       this.play('thud', { volume: 1, rate: 0.6 });
@@ -137,13 +172,25 @@ export class GameAudio {
       this.play('gust', { attach: entity.group, volume: 0.7, rate: 0.5, refDistance: 3 });
       this.play('whisper', { attach: entity.group, offset: new THREE.Vector3(0, 2, 0), volume: 0.8, rate: 0.75, refDistance: 2 });
     });
-    events.on('glimpse', () => this.play('sting', { volume: 0.75, rate: rand(0.95, 1.05) }));
+    events.on('glimpse', () => this.play(this.bank.has('entityLook') ? 'entityLook' : 'sting', { volume: ENTITY_GAIN, rate: rand(0.95, 1.05) }));
     events.on('draft', () => this.play('gust', { volume: 0.75, rate: rand(0.7, 0.9) }));
     events.on('pickup', () => this.play('rustle', { volume: 0.7 }));
     events.on('refuel', () => {
       this.play('rustle', { volume: 0.5, rate: 0.7 });
       this.play('whoosh', { volume: 0.5, rate: 1.3 });
     });
+  }
+
+  /** Its charge / strike: the recorded attack sound, not repeated while one is still ringing out. */
+  private entityAttack(): void {
+    const now = this.ctx.currentTime;
+    if (now - this.lastAttackSound < 2.5) return;
+    this.lastAttackSound = now;
+    if (!this.bank.has('entityAttack')) {
+      this.play('shriek', { attach: this.game.entity.group, offset: new THREE.Vector3(0, 2, 0), volume: 1, refDistance: 4 });
+      return;
+    }
+    this.play('entityAttack', { attach: this.game.entity.group, offset: new THREE.Vector3(0, 1.5, 0), volume: ENTITY_GAIN, refDistance: 5 });
   }
 
   /** Suspend everything while paused; resume on play (browsers need a prior click for this). */
@@ -154,7 +201,7 @@ export class GameAudio {
     else this.ctx.suspend().catch(() => {});
   }
 
-  play(key: SoundKey, o: PlayOptions = {}): void {
+  play(key: AudioKey, o: PlayOptions = {}): void {
     if (!this.ready) return;
     const buffer = this.pick(key);
     const parent = o.attach ?? (o.at ? this.game.scene : null);
@@ -206,7 +253,7 @@ export class GameAudio {
     this.levelLoops = [];
   }
 
-  private pick(key: SoundKey): AudioBuffer {
+  private pick(key: AudioKey): AudioBuffer {
     const list = this.bank.get(key)!;
     return list[Math.floor(Math.random() * list.length)];
   }
@@ -219,7 +266,12 @@ export class GameAudio {
     this.crackle!.setVolume(torch.lit ? 0.12 + 0.3 * torch.ratio : 0);
 
     // Your own footsteps (sprinting is loud — and it can hear that).
-    if (player.steps !== this.lastSteps) {
+    if (this.walkLoop && this.runLoop) {
+      const ease = (loop: THREE.Audio, target: number) =>
+        loop.setVolume(loop.getVolume() + clamp(target - loop.getVolume(), -4 * dt, 4 * dt));
+      ease(this.walkLoop, player.state === 'walk' ? 0.45 : 0);
+      ease(this.runLoop, player.state === 'sprint' ? 0.7 : 0);
+    } else if (player.steps !== this.lastSteps) {
       this.lastSteps = player.steps;
       this.play('step', { volume: player.state === 'sprint' ? 0.55 : 0.2, rate: rand(0.9, 1.1) });
     }
@@ -258,7 +310,7 @@ export class GameAudio {
     this.lastEntityDistance = entity.distance;
     this.entityStepTimer -= dt;
     if (approaching && this.entityStepTimer <= 0) {
-      this.play('thud', { attach: entity.group, volume: 0.9, rate: rand(0.8, 1), refDistance: 2 });
+      this.play('thud', { attach: entity.group, volume: 0.9 * ENTITY_GAIN, rate: rand(0.8, 1), refDistance: 2 });
       this.entityStepTimer = entity.mode === 'hunt' || entity.mode === 'lunge' ? 0.32 : 0.8;
     }
 
@@ -272,7 +324,7 @@ export class GameAudio {
     if (this.echoSteps > 0) {
       this.echoTimer -= dt;
       if (this.echoTimer <= 0) {
-        this.play('thud', { attach: entity.group, volume: 0.7, rate: rand(0.85, 1), refDistance: 2 });
+        this.play('thud', { attach: entity.group, volume: 0.7 * ENTITY_GAIN, rate: rand(0.85, 1), refDistance: 2 });
         this.echoSteps--;
         this.echoTimer = 0.45;
       }
@@ -285,11 +337,20 @@ export class GameAudio {
       this.play('whisper', {
         attach: entity.group,
         offset: new THREE.Vector3(0, 2, 0),
-        volume: 0.35 + 0.65 * near,
+        volume: (0.35 + 0.65 * near) * ENTITY_GAIN,
         rate: rand(0.85, 1.1),
         refDistance: 1.5,
       });
       this.whisperTimer = entity.held ? rand(1.1, 2.0) : lerp(9, 2, near) * rand(0.6, 1.4);
+    }
+
+    // Now and then, it creeps about somewhere out in the dark.
+    this.creepTimer -= dt;
+    if (this.creepTimer <= 0) {
+      if (this.bank.has('entityCreep') && !entity.attacking) {
+        this.play('entityCreep', { attach: entity.group, offset: new THREE.Vector3(0, 0.5, 0), volume: ENTITY_GAIN, rate: rand(0.9, 1.05), refDistance: 4 });
+      }
+      this.creepTimer = rand(9, 24);
     }
 
     // Wind tearing at the flame while it's smothering you.

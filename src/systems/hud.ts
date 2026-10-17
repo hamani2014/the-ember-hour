@@ -3,7 +3,7 @@ const CSS = `
 #hud .cross { position:absolute; left:50%; top:50%; width:4px; height:4px; margin:-2px 0 0 -2px; background:#e8c9a0; opacity:.45; border-radius:50%; }
 #hud .prompt { position:absolute; left:0; right:0; bottom:24%; text-align:center; font-size:17px; letter-spacing:1px; text-shadow:0 0 6px #000,0 0 2px #000; }
 #hud .sub { position:absolute; left:12%; right:12%; bottom:11%; text-align:center; font-size:19px; font-style:italic; color:#f2e2ca; text-shadow:0 0 10px #000,0 0 3px #000; opacity:0; transition:opacity .6s; }
-#hud .sub.show { opacity:1; }
+#hud .sub.show { opacity:1; transition:opacity .08s; }
 #hud .fuel { position:absolute; left:28px; bottom:28px; width:200px; }
 #hud .fuel .label { white-space:nowrap; }
 #hud .fuel .label { font-size:11px; letter-spacing:4px; opacity:.7; margin-bottom:5px; }
@@ -127,8 +127,16 @@ export class Hud {
     if (this.prompt.textContent !== value) this.prompt.textContent = value;
   }
 
-  /** Show a subtitle / inner-thought line. */
+  /** Voice hook: plays a recording for `text` and calls `start` when it begins; false if there isn't one. */
+  speak?: (text: string, start: (duration: number) => void) => boolean;
+
+  /** Show a subtitle / inner-thought line (spoken too, when it has a recording). */
   say(text: string, seconds = 4.5): void {
+    const voiced = this.speak?.(text, (duration) => this.showSub(text, Math.max(seconds, duration + 0.8)));
+    if (!voiced) this.showSub(text, seconds);
+  }
+
+  private showSub(text: string, seconds: number): void {
     this.sub.textContent = text;
     this.sub.classList.add('show');
     clearTimeout(this.subTimer);

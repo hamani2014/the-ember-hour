@@ -32,6 +32,7 @@ const PHASES: Record<EntityPhase, PhaseConfig> = {
 };
 
 const CATCH_DISTANCE = 1.1;
+const CLOSE_DISTANCE = 3.5; // charging attack: close enough for its attack sound
 const MIN_DISTANCE = 0.7;
 const SMOTHER_DRAIN = 18; // fuel/s while it's wrapped around the flame (scripted chase)
 const RETREAT_SPEED = 3.5;
@@ -91,7 +92,7 @@ export class Chronophage {
   /** True while it stands frozen because you looked away mid-charge. */
   held = false;
   /** The attack in progress, if any. */
-  private attack: { pos: THREE.Vector3; stage: 'charge' | 'stalled' | 'retreat'; timer: number; speed: number; unstoppable: boolean } | null = null;
+  private attack: { pos: THREE.Vector3; stage: 'charge' | 'stalled' | 'retreat'; timer: number; speed: number; unstoppable: boolean; close?: boolean } | null = null;
   private attackTimer = 0;
   /** 0..1 — fades it out as it melts back into the dark after an attack. */
   private fade = 1;
@@ -465,6 +466,10 @@ export class Chronophage {
         const step = Math.min(at.speed * (1 + at.timer * 0.2) * dt, d - MIN_DISTANCE);
         at.pos.x += (dx / d) * step;
         at.pos.z += (dz / d) * step;
+        if (!at.close && d - step < CLOSE_DISTANCE) {
+          at.close = true;
+          this.game.events.emit('close');
+        }
         if (d - step <= CATCH_DISTANCE) this.strike();
       }
     } else if (at.stage === 'stalled') {

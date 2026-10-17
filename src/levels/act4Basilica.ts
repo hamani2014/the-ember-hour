@@ -547,8 +547,6 @@ export function buildAct4Basilica(game: Game): void {
             hands.visible = true;
             game.audio.play('whisper', { volume: 1, rate: 0.8 });
             game.audio.play('heartbeat', { volume: 1, rate: 0.6 });
-            game.hud.say('My hands—', 2.5);
-            game.tweens.delay(3, () => game.hud.say('I didn’t drive it out. I became it.', 3.5));
           },
           update: (k) => {
             look(steps, steps.clone().add(new THREE.Vector3(0, -1.4, -0.9)));
