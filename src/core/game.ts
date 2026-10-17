@@ -170,7 +170,7 @@ export class Game {
     this.hud.setHearts(this.hearts, MAX_HEARTS);
   }
 
-  /** Out of hearts: the death card, then back to the last hearth with the flame relit. */
+  /** Out of hearts: the death card, then the whole night starts over from the car. */
   private die(): void {
     this.dead = true;
     this.controlsLocked = true;
@@ -178,17 +178,8 @@ export class Game {
     this.events.emit('caught');
     this.hud.fade(1, 1.2);
     this.hud.showDied(true);
-    this.tweens.delay(4, () => {
-      const { x, z, yaw } = this.checkpoint;
-      this.player.spawn(x, z, yaw);
-      this.torch.refuel(Math.max(0, RESPAWN_FUEL - this.torch.fuel));
-      this.entity.reset();
-      this.heal();
-      this.dead = false;
-      this.controlsLocked = false;
-      this.hud.showDied(false);
-      this.hud.fade(0, 1.5);
-    });
+    // A fresh page load resets everything (inventory, flags, fuel, hearts) back to the prologue.
+    window.setTimeout(() => (location.href = location.pathname), 4500);
   }
 
   /** Spoken warnings as the flame runs low (re-armed once it's topped back up). */

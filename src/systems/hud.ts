@@ -110,7 +110,7 @@ export class Hud {
       <div class="prompt"></div>
       <div class="sub"></div>
       <div class="hearts"></div>
-      <div class="died"><h1>YOU HAVE DIED</h1><p>THE FLAME REMEMBERS WHERE YOU LAST RESTED</p></div>
+      <div class="died"><h1>YOU HAVE DIED</h1><p>THE NIGHT BEGINS AGAIN</p></div>
       <div class="fuel"><div class="label">FLAME</div><div class="bar"><div class="fill"></div></div></div>
       <div class="held"></div>
       <div class="overlay">
