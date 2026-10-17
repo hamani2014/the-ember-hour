@@ -18,6 +18,10 @@ Judging is done primarily from a 3-minute trailer, so atmosphere and readable me
 - Audio: all sounds are procedural placeholders in `src/audio/synth.ts`. To replace one with a real recording (ElevenLabs etc.), drop `src/assets/audio/<key>.mp3` (restart `npm run dev` after adding a new file) — keys: ambience, crackle, whisper, thud, step, heartbeat, shriek, whoosh, gust, rustle, creak, burn, machinery, hiss, clank, rift, void, shatter, organ, bell, birds, engine. Each level picks its loop with `game.audio.setAmbience(key)`.
 - Levels & flow: registry in `src/levels/index.ts`; switch with `game.loadLevel('act2')` (clears world/collision/updaters/tweens; inventory + fuel carry over). Act transitions use `createRift` + `timeTravel` (`systems/rift.ts`). `?act=1`…`?act=4` in the URL jumps straight to an act (no param = prologue). Hazards: `createSteamVent`, gates: `createGate` (systems/door.ts). Chapter cards: `game.hud.title(main, sub)`. One-shots: `game.audio.play(key, { at | attach, volume, rate })`. Looping 3D sounds on level objects: `game.audio.playLoop(key, object)` (auto-stopped on level change). Gameplay → sound wiring goes through `game.events` (`src/core/events.ts`); emit an event rather than calling audio directly from gameplay code.
 - Cutscenes: `beginCutscene(game)` (locks controls, letterbox, hides torch) + `playSequence(game, shots, done)` from `systems/cutscene.ts`; drive `game.camera` directly in each shot's `update(k)`. Cutscene scripts may call `game.audio` directly. `game.hud.endScreen(title, sub)` shows the final card (R restarts).
+- Rooms: `room(game, { x, z, height, wall, floor, ceiling, openings, skip })` in `levels/builder.ts` builds a room with doorways; connect rooms with narrow hallway rooms whose ends are `skip`ped. `createSwingDoor` (systems/door.ts) for ordinary doors.
+- Story: all readable text is in `src/story.ts` (see STORY.md). `createNote(game, { doc, pos, rot })` places a readable document; `createClue(..., { doc })` shows one on pickup. Reading pauses the world (`game.readDocument`).
+- Hearths: `createHearth(game, { position, rotY })` — full torch refuel + checkpoint. One per act. Low-fuel warnings are automatic.
+- Act III's Meridian Chamber (`levels/meridianChamber.ts`) uses walkable slab rectangles and a fall check instead of floors.
 - Per-frame level logic / triggers: `game.onUpdate((dt, t) => ...)`. Timed sequences: `game.tweens.add/delay`. Inner thoughts: `game.hud.say(text)`.
 
 ## Art direction (PS1 retro horror)
@@ -29,8 +33,8 @@ Judging is done primarily from a 3-minute trailer, so atmosphere and readable me
 
 ## Story scope (cut-down from the GDD — do not expand without asking)
 - **Prologue** — in the car: radio advisory, engine dies (look-only, try the key, open the door). Outside: open the trunk, the flashlight dies, light the iron torch, push open the Archive doors. The game starts here.
-- **Act I – Municipal Archive (Present)** — 1 room. Burn the Mayor's missing-person bulletin to open the corridor.
-- **Act II – Ironworks (Past)** — 1 room. Light 4 pilot lights in order 1-3-2-4, find the melted pocket watch (03:17), burn it.
+- **Act I – Municipal Archive (Present)** — Lobby (flyer → sconce → boards) → Records Office (thaw the frozen registry, burn page 42 → ice gate) → Executive Office (Mayor's papers, elevator-shaft rift).
+- **Act II – Ironworks (Past)** — Foundry (logbook → blast furnace → gear door) → hallway hearth → Boiler Room (pilot lights I·III·II·IV, watch → firebox → gate) → Loading Dock (light the smelter → rift).
 - **Act III – Observatory (Future)** — Orrery Hall: light the beacon, turn 3 mirrors to bounce the beam into the quartz core, take it (recording), burn it in the beacon → bridge forms over the abyss → collapsing corridor chase → dive through the mirror of flame.
 - **Act IV – Cinder Basilica** — echoes of the 3 burned clues wait on shrines, plus the altar scroll. Light the great brazier and burn them in the order the apse windows show (I bulletin → II watch → III core → IV scroll) before the 3-minute dawn meter fills.
   - Ending A (in time): loop — Julian wakes up by his car again.

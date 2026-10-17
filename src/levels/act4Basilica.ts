@@ -6,10 +6,13 @@ import { createBurnPoint } from '../systems/burnPoint';
 import { beginCutscene, ease, playSequence } from '../systems/cutscene';
 import { createFire, type Fire } from '../systems/fire';
 import { createClue, createFuel } from '../systems/pickups';
-import { box, plane } from './builder';
+import { createSwingDoor } from '../systems/door';
+import { createHearth } from '../systems/hearth';
+import { createNote } from '../systems/notes';
+import { box, plane, room } from './builder';
 
 /** Seconds from the ritual starting until the sun crests. */
-const DAWN_TIME = 180;
+const DAWN_TIME = 240;
 /** The exterior set used by both endings sits far away from the basilica. */
 const STREET_X = 300;
 
@@ -43,20 +46,32 @@ export function buildAct4Basilica(game: Game): void {
   game.scene.fog = new THREE.Fog(0x07050c, 1, 26);
   game.audio.setAmbience('organ', 0.35);
 
-  // --- Nave shell ---
+  // --- Shells: Narthex → cloister → Nave, and the Crypt off the nave's east side ---
+  // Narthex z[16.4,24] · cloister z[8.4,16] · nave x[-7,7] z[-18,8] · crypt passage x[7.4,10] · crypt x[10.4,18] z[-16,-8]
   const H = 11;
-  box(game, { pos: [0, -0.1, -5], size: [14.8, 0.2, 26.8], material: floor, tile: 2 });
-  box(game, { pos: [0, H + 0.1, -5], size: [14.8, 0.2, 26.8], material: wood, tile: 2 });
-  box(game, { pos: [-7.2, H / 2, -5], size: [0.4, H, 26.8], material: stone, tile: 2 });
-  box(game, { pos: [7.2, H / 2, -5], size: [0.4, H, 26.8], material: stone, tile: 2 });
-  box(game, { pos: [0, H / 2, 8.2], size: [14.8, H, 0.4], material: stone, tile: 2 });
-  box(game, { pos: [0, H / 2, -18.2], size: [14.8, H, 0.4], material: stone, tile: 2 });
-  // Sealed entrance doors.
+  room(game, { x: [-5, 5], z: [16.4, 24], height: 6, wall: stone, floor, ceiling: wood, openings: [{ side: 'n', at: 0, width: 2.4, height: 3.6 }] });
+  room(game, { x: [-1.2, 1.2], z: [8.4, 16], height: 4, wall: stone, floor, ceiling: wood, skip: ['n', 's'] });
+  room(game, {
+    x: [-7, 7],
+    z: [-18, 8],
+    height: H,
+    wall: stone,
+    floor,
+    ceiling: wood,
+    openings: [
+      { side: 's', at: 0, width: 2.4, height: 3.6 },
+      { side: 'e', at: -12, width: 2, height: 2.8 },
+    ],
+  });
+  room(game, { x: [7.4, 10], z: [-13, -11], height: 2.8, wall: stone, floor, ceiling: stone, skip: ['w', 'e'] });
+  room(game, { x: [10.4, 18], z: [-16, -8], height: 3, wall: stone, floor, ceiling: stone, openings: [{ side: 'w', at: -12, width: 2, height: 2.6 }] });
+  // The doors you came in by, sealed behind you.
   for (const x of [-0.72, 0.72]) {
-    box(game, { pos: [x, 1.8, 7.94], size: [1.4, 3.6, 0.12], material: wood, collide: false });
-    box(game, { pos: [x, 2.6, 7.86], size: [1.4, 0.1, 0.05], material: iron, collide: false });
-    box(game, { pos: [x, 1.0, 7.86], size: [1.4, 0.1, 0.05], material: iron, collide: false });
+    box(game, { pos: [x, 1.8, 23.94], size: [1.4, 3.6, 0.12], material: wood, collide: false });
+    box(game, { pos: [x, 2.6, 23.86], size: [1.4, 0.1, 0.05], material: iron, collide: false });
+    box(game, { pos: [x, 1.0, 23.86], size: [1.4, 0.1, 0.05], material: iron, collide: false });
   }
+  createSwingDoor(game, { center: new THREE.Vector3(0, 0, 8.2), width: 2.4, height: 3.6, axis: 'x', material: wood });
 
   // --- Stained glass: side windows + the four apse windows that show the ritual order ---
   const glass: THREE.MeshBasicMaterial[] = [];
@@ -147,9 +162,9 @@ export function buildAct4Basilica(game: Game): void {
     echoes.push(echo);
     createClue(game, { id: r.id, name: r.name, object: echo, thought });
   };
-  shrine(0, -6.55, 6.6, 'The flyer again. Warm, like it never finished burning.');
+  shrine(0, -4.55, 20, 'The flyer again. Warm, like it never finished burning.');
   shrine(1, 6.55, -3, '3:17. It’s always 3:17.');
-  shrine(2, -6.55, -13, 'The voice inside is quiet now. Waiting.');
+  shrine(2, 17.55, -12, 'The voice inside is quiet now. Waiting.');
 
   // --- The great brazier ---
   const brazier = new THREE.Group();
@@ -231,8 +246,39 @@ export function buildAct4Basilica(game: Game): void {
   };
   splinters(-6.3, 0);
   splinters(6.3, 4.3);
-  splinters(6.3, -12.5);
+  splinters(6.3, -15.5);
   splinters(-3, -14.6);
+  splinters(3.4, 18.6);
+  splinters(12, -15);
+
+  // --- Narthex: the memorial, the rite, a last warm fire ---
+  [[-4.98, 22.5, Math.PI / 2], [4.98, 17.6, -Math.PI / 2]].forEach(([x, z, rot], i) => window([x, 4, z], rot, stainedGlassTexture(40 + i)));
+  createHearth(game, { position: new THREE.Vector3(4.1, 0, 21.5), rotY: -Math.PI / 2 });
+  createNote(game, { doc: 'memorial', pos: [2.6, 1.8, 16.42], size: [0.6, 0.5], material: lambert({ map: textures.brass(), color: 0xc8b080, side: THREE.DoubleSide }) });
+  box(game, { pos: [-2.4, 0.55, 18.6], size: [0.5, 1.1, 0.4], material: wood }); // lectern
+  createNote(game, { doc: 'rite', pos: [-2.4, 1.14, 18.6], rot: [-1.2, 0, 0], size: [0.32, 0.28] });
+  box(game, { pos: [-2.6, 0.25, 22], size: [3, 0.5, 0.5], material: wood }); // bench
+  box(game, { pos: [2.2, 0.5, 23.5], size: [1.8, 1.0, 0.3], material: iron }); // candle rack
+  for (let i = 0; i < 5; i++) candle(1.5 + i * 0.35, 1.05, 23.5);
+  const narthexLight = new THREE.PointLight(0xffb070, 1.2, 7, 1.5);
+  narthexLight.position.set(2.2, 2, 22.8);
+  game.world.add(narthexLight);
+
+  // --- Crypt: empty niches, an inscription, and a note left for the last keeper ---
+  for (let x = 11.2; x < 17.5; x += 1.3) {
+    for (const y of [0.7, 1.7]) {
+      plane(game, { pos: [x, y, -15.98], size: [0.9, 0.6], material: lambert({ color: 0x07060a }) });
+      plane(game, { pos: [x, y, -8.02], size: [0.9, 0.6], rot: [0, Math.PI, 0], material: lambert({ color: 0x07060a }) });
+    }
+  }
+  createNote(game, { doc: 'crypt', pos: [14.3, 2.45, -15.97], size: [1.4, 0.35], material: lambert({ map: textures.stone(), color: 0xc8c0b0, side: THREE.DoubleSide }), label: 'the inscription' });
+  box(game, { pos: [11.4, 0.45, -8.7], size: [1.0, 0.9, 0.6], material: stone });
+  createNote(game, { doc: 'priestNote', pos: [11.4, 0.92, -8.7], rot: [-Math.PI / 2, 0, 0.3], size: [0.24, 0.3] });
+  candle(13, 0.05, -9);
+  candle(15.5, 0.05, -15.4);
+  const cryptLight = new THREE.PointLight(0xffa860, 0.8, 6, 1.6);
+  cryptLight.position.set(13, 1.5, -9.5);
+  game.world.add(cryptLight);
 
   // ======================================================================
   // Exterior street set (endings): basilica steps → road → the car and the sign.
@@ -430,6 +476,9 @@ export function buildAct4Basilica(game: Game): void {
     ended = true;
     game.hud.setDawn(null);
     beginCutscene(game);
+    // The dawn finds you in the nave, wherever you were.
+    const f = game.player.feet;
+    if (f.x < -6.5 || f.x > 6.5 || f.z < -17.5 || f.z > 7.5) game.player.spawn(0, 2, 0);
     const eye = game.camera.position.clone();
     const facing = game.player.forward().multiplyScalar(4.5);
     const statue = game.player.feet.clone().add(facing);
@@ -525,6 +574,18 @@ export function buildAct4Basilica(game: Game): void {
     });
     if (!scrollTaken) scroll.position.y = 1.36 + Math.sin(t * 1.1) * 0.01;
 
+    // Stepping into the nave starts the clock — and wakes it.
+    if (!ritualActive && !ended && game.player.feet.z < 7.6 && game.player.feet.x < 7) {
+      ritualActive = true;
+      game.setCheckpoint(0, 6, 0);
+      game.audio.play('bell', { volume: 0.8 });
+      game.hud.say('The windows show the order. Burn them all — before the sun comes up.', 5);
+      game.tweens.delay(4, () => {
+        if (game.entity.mode !== 'dormant' || ended) return;
+        game.entity.activate(4);
+        game.hud.say('And it\u2019s here. All of it.', 3);
+      });
+    }
     if (!ritualActive || ended) return;
     const finalBurning = step === RITUAL.length - 1 && scrollTaken && !game.inventory.find(['altar-scroll']);
     if (!finalBurning) dawn = Math.min(1, dawn + dt / DAWN_TIME);
@@ -546,23 +607,13 @@ export function buildAct4Basilica(game: Game): void {
   });
 
   // --- Arrival ---
-  game.player.spawn(0, 6.3, 0);
-  game.setCheckpoint(0, 6.3, 0);
+  game.player.spawn(0, 22.6, 0);
+  game.setCheckpoint(0, 22.6, 0);
   if (game.torch.fuel < 70) game.torch.refuel(70 - game.torch.fuel);
   game.hud.fade(0, 2.5);
   game.hud.title('ACT IV', 'THE CINDER BASILICA · BEFORE DAWN');
   game.tweens.delay(4.5, () => game.hud.say('A church. The doors sealed shut behind me.', 4));
-  game.tweens.delay(9.5, () => game.hud.say('Echoes of everything I burned… they’re here. And a scroll on the altar.', 5));
-  game.tweens.delay(15, () => {
-    ritualActive = true;
-    game.audio.play('bell', { volume: 0.8 });
-    game.hud.say('The windows show the order. Burn them all — before the sun comes up.', 5);
-  });
-  game.tweens.delay(18, () => {
-    if (game.entity.mode !== 'dormant' || ended) return;
-    game.entity.activate(4);
-    game.hud.say('And it’s here. All of it.', 3);
-  });
+  game.tweens.delay(9.5, () => game.hud.say('Echoes of everything I burned are scattered through this place. The nave is through those doors.', 5));
 }
 
 /** Invisible, generous click target for small props. */
