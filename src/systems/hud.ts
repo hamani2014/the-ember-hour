@@ -49,6 +49,9 @@ const CSS = `
 #hud .overlay p { opacity:.75; margin:5px 0; letter-spacing:1px; }
 `;
 
+/** Pause between one spoken line ending and the next starting (seconds). */
+const SPEECH_GAP = 0.45;
+
 /** DOM overlay: crosshair, interaction prompt, subtitles, fuel bar, held items, pause screen. */
 export class Hud {
   private prompt: HTMLElement;
@@ -129,11 +132,27 @@ export class Hud {
 
   /** Voice hook: plays a recording for `text` and calls `start` when it begins; false if there isn't one. */
   speak?: (text: string, start: (duration: number) => void) => boolean;
+  /** Voice hook: how long a recorded line runs, or null if it has none. */
+  voiceDuration?: (text: string) => number | null;
+  /** When the last queued spoken line finishes (performance.now() seconds). */
+  private speechEnds = 0;
 
-  /** Show a subtitle / inner-thought line (spoken too, when it has a recording). */
+  /**
+   * Show a subtitle / inner-thought line (spoken too, when it has a recording). Lines never talk over
+   * each other: one that arrives while Julian is still speaking waits for him to finish, plus a breath.
+   * So calling say(a); say(b) back to back plays them as one natural exchange.
+   */
   say(text: string, seconds = 4.5): void {
-    const voiced = this.speak?.(text, (duration) => this.showSub(text, Math.max(seconds, duration + 0.8)));
-    if (!voiced) this.showSub(text, seconds);
+    const now = performance.now() / 1000;
+    const at = this.speechEnds > now ? this.speechEnds + SPEECH_GAP : now;
+    const duration = this.voiceDuration?.(text) ?? null;
+    if (duration !== null) this.speechEnds = at + duration;
+    const go = () => {
+      const voiced = this.speak?.(text, (d) => this.showSub(text, Math.max(seconds, d + 0.8)));
+      if (!voiced) this.showSub(text, seconds);
+    };
+    if (at > now) window.setTimeout(go, (at - now) * 1000);
+    else go();
   }
 
   private showSub(text: string, seconds: number): void {

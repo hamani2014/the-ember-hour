@@ -51,7 +51,7 @@ export function buildAct2Boiler(game: Game): void {
   game.world.add(new THREE.AmbientLight(0x3a1e10, 0.9));
   game.scene.background = new THREE.Color(0x000000);
   game.scene.fog = new THREE.Fog(0x0a0503, 1, 18);
-  game.audio.setAmbience('machinery', 0.16);
+  game.audio.setAmbience(null);
 
   // ─── Shells ───────────────────────────────────────────────
   room(game, { x: [-8, 8], z: [-8, 8], height: 6, wall: brick, floor, ceiling: rust, openings: [{ side: 'e', at: 0, width: 2.4, height: 3 }] });

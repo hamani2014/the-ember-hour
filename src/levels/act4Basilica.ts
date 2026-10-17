@@ -45,7 +45,7 @@ export function buildAct4Basilica(game: Game): void {
 
   game.world.add(new THREE.AmbientLight(0x1a1430, 0.55));
   game.scene.fog = new THREE.Fog(0x07050c, 1, 26);
-  game.audio.setAmbience('organ', 0.15);
+  game.audio.setAmbience(null);
 
   // --- Shells: Narthex → cloister → Nave, and the Crypt off the nave's east side ---
   // Narthex z[16.4,24] · cloister z[8.4,16] · nave x[-7,7] z[-18,8] · crypt passage x[7.4,10] · crypt x[10.4,18] z[-16,-8]
@@ -520,7 +520,7 @@ export function buildAct4Basilica(game: Game): void {
           duration: 7,
           start: () => {
             game.hud.say('Someone’s down there. A torch. Just arriving…', 3.5);
-            game.tweens.delay(4, () => game.hud.say('…That’s me.', 3));
+            game.hud.say('…That’s me.', 3);
           },
           update: (k) => {
             game.camera.fov = 70 - 52 * ease(Math.min(1, k * 1.4));

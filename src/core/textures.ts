@@ -345,15 +345,26 @@ export function stainedGlassTexture(seed: number, icon?: GlassIcon, numeral?: st
 
 /** Hand-painted roadside sign. */
 export function signTexture(lines: string[]): THREE.CanvasTexture {
-  return canvasTexture(160, 64, 401, (g, r) => {
+  // 256x100 keeps the 2.4 x 0.95 sign's proportions; each line shrinks to fit inside the border.
+  return canvasTexture(256, 100, 401, (g, r) => {
     noiseFill(g, r, [190, 182, 160], 10);
     stains(g, r, 10, '#5a3a1a');
+    g.strokeStyle = '#2a1a10';
+    g.lineWidth = 3;
+    g.strokeRect(6, 6, 244, 88);
     g.fillStyle = '#2a1a10';
     g.textAlign = 'center';
-    g.font = 'bold 15px serif';
-    g.fillText(lines[0], 80, 26);
-    g.font = '11px serif';
-    lines.slice(1).forEach((line, i) => g.fillText(line, 80, 44 + i * 13));
+    g.textBaseline = 'middle';
+    const fit = (text: string, size: number, weight: string) => {
+      do g.font = `${weight}${size--}px serif`;
+      while (g.measureText(text).width > 228 && size > 8);
+    };
+    fit(lines[0], 26, 'bold ');
+    g.fillText(lines[0], 128, lines.length > 1 ? 38 : 50);
+    lines.slice(1).forEach((line, i) => {
+      fit(line, 18, '');
+      g.fillText(line, 128, 66 + i * 20);
+    });
   });
 }
 

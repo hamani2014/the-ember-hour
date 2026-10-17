@@ -45,7 +45,8 @@ export class GameAudio {
   private wantRunning = true;
   private crackle?: THREE.PositionalAudio;
   private ambience?: THREE.Audio;
-  private ambienceKey: SoundKey = 'ambience';
+  private ambienceKey: SoundKey | null = 'ambience';
+  private ambienceVolume = 0.32;
   private levelLoops: THREE.PositionalAudio[] = [];
 
   // Behaviour timers.
@@ -63,6 +64,7 @@ export class GameAudio {
     this.listener.setMasterVolume(0.9);
     this.voice = new Voice(this.listener);
     game.hud.speak = (text, start) => this.voice.speak(text, start);
+    game.hud.voiceDuration = (text) => this.voice.duration(text);
     void this.init();
   }
 
@@ -81,7 +83,7 @@ export class GameAudio {
     this.ambience.setLoop(true);
     this.ambience.setVolume(0.32);
     this.ready = true;
-    this.setAmbience(this.ambienceKey);
+    this.setAmbience(this.ambienceKey, this.ambienceVolume);
 
     // Fire crackle sits on the torch flame: right-front of your head.
     const crackle = new THREE.PositionalAudio(this.listener);
@@ -109,11 +111,13 @@ export class GameAudio {
     this.bindEvents();
   }
 
-  /** Swap the looping background bed (each act sets its own). */
-  setAmbience(key: SoundKey, volume = 0.32): void {
+  /** Swap the looping background bed (each act sets its own); null = silence. */
+  setAmbience(key: SoundKey | null, volume = 0.32): void {
     this.ambienceKey = key;
+    this.ambienceVolume = volume;
     if (!this.ready || !this.ambience) return;
     if (this.ambience.isPlaying) this.ambience.stop();
+    if (!key) return;
     this.ambience.setBuffer(this.pick(key));
     this.ambience.setVolume(volume);
     this.ambience.play();
@@ -182,7 +186,7 @@ export class GameAudio {
     const now = this.ctx.currentTime;
     if (now - this.lastEntitySound < 3) return; // let the last one ring out first
     this.lastEntitySound = now;
-    this.play('entityCreep', { attach: this.game.entity.group, offset: new THREE.Vector3(0, 0.5, 0), volume: ENTITY_GAIN * 1.2, rate: rand(0.92, 1.05), refDistance: 7 });
+    this.play('entityCreep', { attach: this.game.entity.group, offset: new THREE.Vector3(0, 0.5, 0), volume: ENTITY_GAIN * 2.2, rate: rand(0.92, 1.05), refDistance: 12 });
   }
 
   /** Suspend everything while paused; resume on play (browsers need a prior click for this). */
@@ -255,7 +259,7 @@ export class GameAudio {
     const { player, torch, entity } = this.game;
 
     // Torch fire follows the fuel level.
-    this.crackle!.setVolume(torch.lit ? 0.12 + 0.3 * torch.ratio : 0);
+    this.crackle!.setVolume(torch.lit ? 0.04 + 0.08 * torch.ratio : 0); // kept low: its roar reads as rain and masks the entity
 
     // Your own footsteps (sprinting is loud — and it can hear that).
     if (this.walkLoop && this.runLoop) {

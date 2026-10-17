@@ -38,7 +38,7 @@ export function buildAct1Lobby(game: Game): void {
   game.world.add(new THREE.AmbientLight(0x1c1626, 0.5));
   game.scene.background = new THREE.Color(0x000000);
   game.scene.fog = new THREE.Fog(0x040302, 1, 15);
-  game.audio.setAmbience('ambience', 0.14);
+  game.audio.setAmbience(null); // silence indoors: the player and the entity carry the sound
 
   // ─── Shells ───────────────────────────────────────────────
   room(game, { x: [-6, 6], z: [-5, 5], height: 3.5, wall: plaster, floor, ceiling, openings: [{ side: 'n', at: 0, width: 2, height: 2.5 }] });

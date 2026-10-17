@@ -70,9 +70,29 @@ const FILES = import.meta.glob<string>('../assets/audio/voice/*.mp3', { eager: t
 const norm = (text: string) => text.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 const BY_TEXT = new Map(Object.entries(LINES).map(([id, text]) => [norm(text), id]));
 
+/** A decoded line, with the silence the recording has at either end measured off. */
+interface Clip {
+  buffer: AudioBuffer;
+  start: number;
+  end: number;
+}
+
+/** Where the speech actually starts and stops (seconds), ignoring near-silent head and tail. */
+function trim(buffer: AudioBuffer): Clip {
+  const data = buffer.getChannelData(0);
+  const sr = buffer.sampleRate;
+  const loud = (i: number) => Math.abs(data[i]) > 0.02;
+  let a = 0;
+  while (a < data.length && !loud(a)) a++;
+  let b = data.length - 1;
+  while (b > a && !loud(b)) b--;
+  if (a >= b) return { buffer, start: 0, end: buffer.duration };
+  return { buffer, start: Math.max(0, a / sr - 0.04), end: Math.min(buffer.duration, b / sr + 0.12) };
+}
+
 export class Voice {
-  private buffers = new Map<string, AudioBuffer>();
-  private loading = new Map<string, Promise<AudioBuffer | null>>();
+  private clips = new Map<string, Clip>();
+  private loading = new Map<string, Promise<Clip | null>>();
   private current?: THREE.Audio;
 
   constructor(private listener: THREE.AudioListener) {
@@ -80,7 +100,7 @@ export class Voice {
     for (const id of Object.keys(LINES)) void this.load(id);
   }
 
-  private load(id: string): Promise<AudioBuffer | null> {
+  private load(id: string): Promise<Clip | null> {
     const url = FILES[`../assets/audio/voice/${id}.mp3`];
     if (!url) return Promise.resolve(null);
     let p = this.loading.get(id);
@@ -88,7 +108,11 @@ export class Voice {
       p = fetch(url)
         .then((r) => r.arrayBuffer())
         .then((data) => this.listener.context.decodeAudioData(data))
-        .then((buffer) => (this.buffers.set(id, buffer), buffer))
+        .then((buffer) => {
+          const clip = trim(buffer);
+          this.clips.set(id, clip);
+          return clip;
+        })
         .catch(() => (console.warn(`Could not load voice line ${id}`), null));
       this.loading.set(id, p);
     }
@@ -100,22 +124,36 @@ export class Voice {
    * for lines with no recording (the caller shows them as plain subtitles).
    */
   speak(text: string, start: (duration: number) => void): boolean {
-    const id = BY_TEXT.get(norm(text));
-    if (!id || !FILES[`../assets/audio/voice/${id}.mp3`]) return false;
-    const go = (buffer: AudioBuffer | null) => {
-      if (!buffer) return start(0);
+    const id = this.idFor(text);
+    if (!id) return false;
+    const go = (clip: Clip | null) => {
+      if (!clip) return start(0);
       if (this.current?.isPlaying) this.current.stop();
       const sound = new THREE.Audio(this.listener);
-      sound.setBuffer(buffer);
+      sound.setBuffer(clip.buffer);
       sound.setVolume(1.1);
+      sound.offset = clip.start;
+      sound.duration = clip.end - clip.start;
       sound.play();
       this.current = sound;
-      start(buffer.duration);
+      start(clip.end - clip.start);
     };
-    const ready = this.buffers.get(id);
+    const ready = this.clips.get(id);
     if (ready) go(ready);
     else void this.load(id).then(go);
     return true;
+  }
+
+  /** How long the spoken line runs (seconds), if it has a loaded recording. */
+  duration(text: string): number | null {
+    const id = this.idFor(text);
+    const clip = id ? this.clips.get(id) : undefined;
+    return clip ? clip.end - clip.start : null;
+  }
+
+  private idFor(text: string): string | null {
+    const id = BY_TEXT.get(norm(text));
+    return id && FILES[`../assets/audio/voice/${id}.mp3`] ? id : null;
   }
 
   stop(): void {

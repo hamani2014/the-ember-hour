@@ -228,14 +228,30 @@ export function buildPrologue(game: Game): void {
     car.add(lamp, beam, beam.target);
     return beam;
   });
-  // Tail lights: a soft red glow on the wet road behind the car, the way to the trunk.
-  const tailMat = new THREE.MeshBasicMaterial({ color: 0xd8301e, fog: false });
-  for (const x of [-0.65, 0.65]) {
-    const lamp = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.1, 0.03), tailMat);
-    lamp.position.set(x, 0.65, 2.21);
-    const glow = new THREE.PointLight(0xff2a18, 1.3, 6, 1.5);
-    glow.position.set(x, 0.65, 2.45);
-    car.add(lamp, glow);
+  // Tail lights: wrap round the rear corners so they read from the side too, and wash the back of
+  // the car and the wet road in red — the way to the trunk.
+  const tailMat = new THREE.MeshBasicMaterial({ color: 0xff3a24, fog: false });
+  const haloCanvas = document.createElement('canvas');
+  haloCanvas.width = haloCanvas.height = 32;
+  const hg = haloCanvas.getContext('2d')!;
+  const grad = hg.createRadialGradient(16, 16, 0, 16, 16, 16);
+  grad.addColorStop(0, 'rgba(255,255,255,1)');
+  grad.addColorStop(0.35, 'rgba(255,255,255,0.35)');
+  grad.addColorStop(1, 'rgba(255,255,255,0)');
+  hg.fillStyle = grad;
+  hg.fillRect(0, 0, 32, 32);
+  const haloMat = new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(haloCanvas), color: 0xff2a14, transparent: true, opacity: 0.4, blending: THREE.AdditiveBlending, depthWrite: false, fog: false });
+  for (const x of [-0.68, 0.68]) {
+    const lamp = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.13, 0.06), tailMat);
+    lamp.position.set(x, 0.66, 2.21);
+    const corner = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.13, 0.3), tailMat);
+    corner.position.set(Math.sign(x) * 0.905, 0.66, 2.05);
+    const halo = new THREE.Sprite(haloMat);
+    halo.scale.setScalar(0.6);
+    halo.position.set(x, 0.66, 2.3);
+    const glow = new THREE.PointLight(0xff2a18, 2.2, 7, 1.4);
+    glow.position.set(Math.sign(x) * 1.05, 0.75, 2.55);
+    car.add(lamp, corner, halo, glow);
   }
   const trunkLamp = new THREE.PointLight(0xffe0b0, 0, 2.6, 1.5);
   trunkLamp.position.set(0, 1.25, 1.75);
@@ -336,11 +352,15 @@ export function buildPrologue(game: Game): void {
     tweens.delay(1.5, () => staticLoop?.setVolume(0.2));
     tweens.delay(3.5, () => staticLoop?.stop());
     if (!looped) {
-      tweens.delay(1, () => hud.say('No. No, no, no — not here.', 3));
-      tweens.delay(4.5, () => hud.say('Ashen Vale. Population zero. Perfect.', 3.5));
+      tweens.delay(1, () => {
+        hud.say('No. No, no, no — not here.', 3);
+        hud.say('Ashen Vale. Population zero. Perfect.', 3.5); // follows straight on from the first
+      });
     } else {
-      tweens.delay(1, () => hud.say('The sign. The radio. The engine… I’ve been here before.', 4));
-      tweens.delay(5.5, () => hud.say('How many times have I been here before?', 4));
+      tweens.delay(1, () => {
+        hud.say('The sign. The radio. The engine… I’ve been here before.', 4);
+        hud.say('How many times have I been here before?', 4);
+      });
     }
   });
 
