@@ -130,3 +130,61 @@ export function createBoardedDoor(game: Game, o: BoardedDoorOptions): BoardedDoo
     },
   };
 }
+
+export interface SwingDoorOptions {
+  /** Bottom-centre of the doorway. */
+  center: THREE.Vector3;
+  width: number;
+  height: number;
+  /** Axis the doorway spans along (x for doors in north/south walls, z for east/west walls). */
+  axis: 'x' | 'z';
+  /** Which way it swings open (flip if it opens towards the player). */
+  swing?: 1 | -1;
+  /** If this returns a message, the door is locked and the prompt shows it instead. */
+  locked?: () => string | null;
+  material?: THREE.Material;
+}
+
+/** An ordinary hinged door between rooms: E to open, it creaks and swings away. */
+export function createSwingDoor(game: Game, o: SwingDoorOptions): { readonly open: boolean } {
+  const T = 0.08;
+  const pivot = new THREE.Group();
+  const panel = new THREE.Mesh(
+    new THREE.BoxGeometry(o.axis === 'x' ? o.width : T, o.height, o.axis === 'x' ? T : o.width),
+    o.material ?? lambert({ map: textures.wood(), color: 0x8a6a50 }),
+  );
+  const knob = new THREE.Mesh(new THREE.SphereGeometry(0.04, 6, 4), lambert({ map: textures.iron(), color: 0xb09060 }));
+  if (o.axis === 'x') {
+    pivot.position.set(o.center.x - o.width / 2, 0, o.center.z);
+    panel.position.set(o.width / 2, o.height / 2, 0);
+    knob.position.set(o.width - 0.12, 1.0, 0);
+  } else {
+    pivot.position.set(o.center.x, 0, o.center.z - o.width / 2);
+    panel.position.set(0, o.height / 2, o.width / 2);
+    knob.position.set(0, 1.0, o.width - 0.12);
+  }
+  panel.castShadow = panel.receiveShadow = true;
+  pivot.add(panel, knob);
+  game.world.add(pivot);
+  const collider = game.collision.addObject(panel);
+
+  let open = false;
+  game.interaction.register({
+    object: pivot,
+    range: 2.2,
+    prompt: () => (open ? null : (o.locked?.() ?? 'Open the door')),
+    interact: () => {
+      if (open || o.locked?.()) return;
+      open = true;
+      game.collision.remove(collider);
+      game.events.emit('creak', o.center.clone().setY(1.2));
+      const target = 1.75 * (o.swing ?? 1);
+      game.tweens.add(0.9, (k) => (pivot.rotation.y = target * (1 - (1 - k) ** 3)));
+    },
+  });
+  return {
+    get open() {
+      return open;
+    },
+  };
+}

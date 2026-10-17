@@ -40,12 +40,16 @@ export class Game {
   /** Where the player wakes up after the shadow takes them. Levels move this forward. */
   checkpoint = { x: 0, z: 0, yaw: 0 };
   level: LevelId | null = null;
+  /** A document is open: the world is paused until it's closed. */
+  reading = false;
+  private onDocumentClosed?: () => void;
   /** True during cutscenes: the player can't move or interact; level scripts drive the camera. */
   controlsLocked = false;
   /** One-off story/hint flags that persist across levels (e.g. "already showed the steam hint"). */
   readonly flags = new Set<string>();
   private pendingLevel: LevelId | null = null;
   private updaters: UpdateFn[] = [];
+  private fuelWarnings = new Set<number>();
 
   constructor(container: HTMLElement, hudRoot: HTMLElement) {
     this.renderer = new PS1Renderer(container);
@@ -92,8 +96,40 @@ export class Game {
     this.torch.setHeld(true);
     this.hud.setFuelVisible(true);
     this.hud.setCinematic(false);
+    if (this.reading) this.closeDocument();
     this.level = id;
     LEVELS[id](this);
+  }
+
+  /** Open a note/letter/clipping on screen. The world pauses until the player closes it with E. */
+  readDocument(title: string, body: string, onClose?: () => void): void {
+    this.reading = true;
+    this.onDocumentClosed = onClose;
+    this.hud.showDocument(title, body);
+    this.events.emit('pickup');
+  }
+
+  private closeDocument(): void {
+    this.reading = false;
+    this.hud.hideDocument();
+    const done = this.onDocumentClosed;
+    this.onDocumentClosed = undefined;
+    done?.();
+  }
+
+  /** Spoken warnings as the flame runs low (re-armed once it's topped back up). */
+  private warnLowFuel(): void {
+    if (!this.torch.carried || this.controlsLocked) return;
+    const r = this.torch.ratio;
+    if (r > 0.45) this.fuelWarnings.clear();
+    if (!this.torch.lit) return;
+    if (r < 0.3 && !this.fuelWarnings.has(1)) {
+      this.fuelWarnings.add(1);
+      this.hud.say('My flame is dying. I need something to burn — or a hearth to rekindle it.', 4.5);
+    } else if (r < 0.12 && !this.fuelWarnings.has(2)) {
+      this.fuelWarnings.add(2);
+      this.hud.say('It’s almost out. Find a fire. Now.', 3.5);
+    }
   }
 
   setCheckpoint(x: number, z: number, yaw: number): void {
@@ -130,7 +166,10 @@ export class Game {
       const playing = this.input.locked;
       this.hud.setPaused(!playing);
       this.audio.setRunning(playing);
-      if (playing) {
+      // The E that closes a document must not also trigger whatever is in front of the player.
+      const closing = this.reading && (this.input.wasPressed('KeyE') || this.input.wasPressed('Space') || this.input.wasPressed('Enter'));
+      if (closing) this.closeDocument();
+      if (playing && !this.reading) {
         this.audio.update(dt);
         if (!this.controlsLocked) {
           this.player.update(dt);
@@ -141,10 +180,11 @@ export class Game {
         this.tweens.update(dt);
       }
       this.hud.setThreat(this.entity.threat);
-      if (!this.controlsLocked) this.interaction.update();
+      if (!this.controlsLocked && !this.reading && !closing) this.interaction.update();
       else this.hud.setPrompt(null);
       this.embers.update(dt, t);
       this.hud.setFuel(this.torch.ratio);
+      this.warnLowFuel();
       this.renderer.render(this.scene, this.camera);
       this.input.endFrame();
     });

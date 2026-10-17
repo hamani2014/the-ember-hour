@@ -4,7 +4,7 @@ import { createFire, type Fire } from '../systems/fire';
 import type { MoveState } from './controller';
 
 /** Fuel burned per second for each movement state. */
-const BURN_RATE: Record<MoveState, number> = { still: 0.4, walk: 0.9, sprint: 3.0 };
+const BURN_RATE: Record<MoveState, number> = { still: 0.25, walk: 0.5, sprint: 1.6 };
 const LIT_COLOR = new THREE.Color(0xff8a3a);
 const EMBER_COLOR = new THREE.Color(0x8a1a05);
 

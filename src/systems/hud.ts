@@ -5,6 +5,7 @@ const CSS = `
 #hud .sub { position:absolute; left:12%; right:12%; bottom:11%; text-align:center; font-size:19px; font-style:italic; color:#f2e2ca; text-shadow:0 0 10px #000,0 0 3px #000; opacity:0; transition:opacity .6s; }
 #hud .sub.show { opacity:1; }
 #hud .fuel { position:absolute; left:28px; bottom:28px; width:200px; }
+#hud .fuel .label { white-space:nowrap; }
 #hud .fuel .label { font-size:11px; letter-spacing:4px; opacity:.7; margin-bottom:5px; }
 #hud .fuel .bar { height:6px; background:rgba(255,255,255,.06); border:1px solid rgba(232,201,160,.3); }
 #hud .fuel .fill { height:100%; width:100%; background:linear-gradient(90deg,#6a1404,#ff6a14,#ffd27a); }
@@ -29,6 +30,12 @@ const CSS = `
 #hud.cinematic .fuel, #hud.cinematic .held, #hud.cinematic .cross, #hud.cinematic .prompt, #hud.cinematic .dawn { display:none; }
 #hud .end { position:absolute; left:0; right:0; top:62%; text-align:center; font-size:13px; letter-spacing:4px; opacity:0; transition:opacity 2s; }
 #hud .end.show { opacity:.7; }
+#hud .doc { position:absolute; inset:0; display:none; align-items:center; justify-content:center; background:rgba(0,0,0,.62); }
+#hud .doc.show { display:flex; }
+#hud .doc .paper { width:min(560px,86vw); max-height:74vh; overflow:auto; background:linear-gradient(170deg,#e2d6ba,#cbbd9b); color:#2a1e12; padding:28px 36px 22px; font-family:Georgia,'Times New Roman',serif; font-size:16px; line-height:1.6; box-shadow:0 0 50px #000, inset 0 0 40px rgba(90,60,20,.35); transform:rotate(-0.5deg); }
+#hud .doc .paper h2 { font-size:13px; letter-spacing:4px; text-transform:uppercase; margin:0 0 16px; color:#5a3418; font-weight:normal; border-bottom:1px solid rgba(90,52,24,.35); padding-bottom:8px; }
+#hud .doc .paper .body { white-space:pre-wrap; }
+#hud .doc .hint { position:absolute; bottom:7%; left:0; right:0; text-align:center; font-size:12px; letter-spacing:4px; opacity:.75; }
 #hud .overlay { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; background:rgba(0,0,0,.72); }
 #hud .overlay.hidden { display:none; }
 #hud .overlay h1 { font-size:44px; letter-spacing:12px; color:#ff9a4a; margin:0 0 18px; font-weight:normal; text-shadow:0 0 18px #ff5a0a; }
@@ -41,6 +48,7 @@ export class Hud {
   private sub: HTMLElement;
   private fuel: HTMLElement;
   private fuelFill: HTMLElement;
+  private fuelLabel: HTMLElement;
   private held: HTMLElement;
   private overlay: HTMLElement;
   private vignette: HTMLElement;
@@ -62,6 +70,7 @@ export class Hud {
       <div class="dawn"><div class="label">DAWN</div><div class="bar"><div class="fill"></div></div></div>
       <div class="title"><div class="main"></div><div class="subt"></div></div>
       <div class="cross"></div>
+      <div class="doc"><div class="paper"><h2></h2><div class="body"></div></div><div class="hint">[E] CLOSE</div></div>
       <div class="prompt"></div>
       <div class="sub"></div>
       <div class="fuel"><div class="label">FLAME</div><div class="bar"><div class="fill"></div></div></div>
@@ -76,6 +85,7 @@ export class Hud {
     this.sub = q('.sub');
     this.fuel = q('.fuel');
     this.fuelFill = q('.fuel .fill');
+    this.fuelLabel = q('.fuel .label');
     this.held = q('.held');
     this.overlay = q('.overlay');
     this.vignette = q('.vignette');
@@ -123,7 +133,10 @@ export class Hud {
 
   setFuel(ratio: number): void {
     this.fuelFill.style.width = `${(ratio * 100).toFixed(1)}%`;
-    this.fuel.classList.toggle('low', ratio < 0.2);
+    const low = ratio < 0.25;
+    this.fuel.classList.toggle('low', low);
+    const label = low ? 'FLAME · FIND A HEARTH OR SOMETHING TO BURN' : 'FLAME';
+    if (this.fuelLabel.textContent !== label) this.fuelLabel.textContent = label;
   }
 
   setHeld(names: string[]): void {
@@ -151,6 +164,17 @@ export class Hud {
     window.addEventListener('keydown', (e) => {
       if (e.code === 'KeyR') location.href = location.pathname;
     });
+  }
+
+  showDocument(title: string, body: string): void {
+    const doc = this.root.querySelector<HTMLElement>('.doc')!;
+    doc.querySelector('h2')!.textContent = title;
+    doc.querySelector('.body')!.textContent = body;
+    doc.classList.add('show');
+  }
+
+  hideDocument(): void {
+    this.root.querySelector('.doc')!.classList.remove('show');
   }
 
   setPaused(paused: boolean): void {
