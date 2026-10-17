@@ -45,7 +45,7 @@ export function buildAct4Basilica(game: Game): void {
 
   game.world.add(new THREE.AmbientLight(0x1a1430, 0.55));
   game.scene.fog = new THREE.Fog(0x07050c, 1, 26);
-  game.audio.setAmbience('organ', 0.35);
+  game.audio.setAmbience('organ', 0.15);
 
   // --- Shells: Narthex → cloister → Nave, and the Crypt off the nave's east side ---
   // Narthex z[16.4,24] · cloister z[8.4,16] · nave x[-7,7] z[-18,8] · crypt passage x[7.4,10] · crypt x[10.4,18] z[-16,-8]
@@ -318,11 +318,14 @@ export function buildAct4Basilica(game: Game): void {
     wheel.position.set(x, 0.33, z);
     car.add(wheel);
   }
-  const lampMaterial = new THREE.MeshBasicMaterial({ color: 0x2a2620, fog: false });
+  // Tail lights glowing red in the dark, as on the night he arrived.
+  const lampMaterial = new THREE.MeshBasicMaterial({ color: 0xd8301e, fog: false });
   for (const x of [-0.6, 0.6]) {
     const lamp = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.15, 0.05), lampMaterial);
     lamp.position.set(x, 0.65, 2.21);
-    car.add(lamp);
+    const glow = new THREE.PointLight(0xff2a18, 1.3, 6, 1.5);
+    glow.position.set(x, 0.65, 2.45);
+    car.add(lamp, glow);
   }
   car.position.set(STREET_X - 1.2, 0, -58);
   game.world.add(car);
@@ -349,10 +352,10 @@ export function buildAct4Basilica(game: Game): void {
   box(game, { pos: [0.32, 1.5, 0.3], size: [0.04, 0.5, 0.04], material: iron, collide: false, parent: arriving });
   const arrivingFire = createFire(0.7);
   arrivingFire.group.position.set(0.32, 1.76, 0.3);
-  const arrivingLight = new THREE.PointLight(0xff8a3a, 2.5, 8, 1.5);
+  const arrivingLight = new THREE.PointLight(0xff8a3a, 4, 10, 1.5);
   arrivingLight.position.set(0.32, 1.9, 0.5);
   arriving.add(arrivingFire.group, arrivingLight);
-  // The flame has to glint through the morning fog from the steps.
+  // The flame has to glint through the night fog from the steps.
   arrivingFire.group.traverse((o) => {
     if (o instanceof THREE.Mesh) (o.material as THREE.MeshBasicMaterial).fog = false;
   });
@@ -360,17 +363,19 @@ export function buildAct4Basilica(game: Game): void {
   arriving.visible = false;
   game.world.add(arriving);
 
-  const goOutside = (harsh: boolean) => {
-    const sky = harsh ? 0xe6e4de : 0x9c98a4;
+  // Both endings step out into the same night he arrived in: time has rewound to the start.
+  const goOutside = () => {
+    const sky = 0x070a12;
+    const fogFar = 48;
     game.scene.background = new THREE.Color(sky);
-    game.scene.fog = new THREE.Fog(sky, 8, harsh ? 70 : 85);
-    const ambient = new THREE.AmbientLight(harsh ? 0xf4f2ec : 0xb8b4c8, harsh ? 1.8 : 1.1);
-    const sun = new THREE.DirectionalLight(harsh ? 0xffffff : 0xffd8a8, harsh ? 2.4 : 1.4);
+    game.scene.fog = new THREE.Fog(sky, 4, fogFar);
+    const ambient = new THREE.AmbientLight(0x3a4466, 0.6);
+    const sun = new THREE.DirectionalLight(0x9aa8d0, 0.55); // moonlight
     sun.position.set(STREET_X + 20, 12, -30);
     sun.target.position.set(STREET_X, 0, -30);
     game.world.add(ambient, sun, sun.target);
     game.audio.stopAmbience();
-    return { ambient, sun, sky, fogFar: harsh ? 70 : 85, ambientLevel: ambient.intensity, sunLevel: sun.intensity };
+    return { ambient, sun, sky, fogFar, ambientLevel: ambient.intensity, sunLevel: sun.intensity };
   };
   const tesseract = createTesseract(game);
 
@@ -391,7 +396,7 @@ export function buildAct4Basilica(game: Game): void {
     const at = game.entity.group.position.clone().setY(1.5);
     if (game.entity.mode !== 'dormant') {
       game.embers.emit(at, 220, 1.2, 3);
-      game.audio.play('shriek', { at, volume: 1, rate: 0.7, refDistance: 4 });
+      game.audio.play('entityAttack', { at, volume: 1.5, rate: 0.8, refDistance: 5 });
     }
     game.entity.deactivate();
     game.hud.say('It’s… breaking apart.', 2.5);
@@ -405,8 +410,9 @@ export function buildAct4Basilica(game: Game): void {
         {
           duration: 7,
           start: () => {
-            goOutside(false);
+            goOutside();
             birds = game.audio.playLoop('birds', birdsAnchor, 1, 6);
+            game.hud.fade(1, 0, '#000'); // the golden flash cuts to black, then the night street
             game.hud.fade(0, 2.5);
             game.tweens.delay(2.5, () => game.hud.say('Morning. Birds… I made it. I actually—', 4));
           },
@@ -502,8 +508,9 @@ export function buildAct4Basilica(game: Game): void {
         {
           duration: 5,
           start: () => {
-            outside = goOutside(true);
+            outside = goOutside();
             arriving.visible = true;
+            game.hud.fade(1, 0, '#000'); // the dawn's white cuts to black, then the night street
             game.hud.fade(0, 3);
             game.tweens.delay(1.2, () => game.hud.say('Daylight. It’s over… isn’t it?', 3.5));
           },
@@ -545,7 +552,7 @@ export function buildAct4Basilica(game: Game): void {
             game.camera.fov = 70;
             game.camera.updateProjectionMatrix();
             hands.visible = true;
-            game.audio.play('whisper', { volume: 1, rate: 0.8 });
+            game.audio.play('entityCreep', { volume: 1.5, rate: 0.85 });
             game.audio.play('heartbeat', { volume: 1, rate: 0.6 });
           },
           update: (k) => {

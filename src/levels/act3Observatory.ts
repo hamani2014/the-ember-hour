@@ -71,7 +71,7 @@ export function buildAct3Observatory(game: Game): void {
   skyLight.position.set(-4, 10, 3);
   game.world.add(skyLight);
   game.scene.fog = new THREE.Fog(0x0d0618, 1, 28);
-  game.audio.setAmbience('void', 0.4);
+  game.audio.setAmbience('void', 0.16);
 
   // The bleeding sky (no fog, so it always reads).
   const sky = new THREE.Mesh(new THREE.SphereGeometry(60, 16, 10), new THREE.MeshBasicMaterial({ map: textures.sky(), side: THREE.BackSide, fog: false }));

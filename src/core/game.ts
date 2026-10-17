@@ -41,7 +41,7 @@ export class Game {
   checkpoint = { x: 0, z: 0, yaw: 0 };
   level: LevelId | null = null;
   /** A choice menu is open (e.g. the ritual offering): the world is paused until the player picks. */
-  private choosing: { ids: string[]; onPick: (id: string | null) => void } | null = null;
+  private choosing: { ids: string[]; index: number; onPick: (id: string | null) => void } | null = null;
   /** A document is open: the world is paused until it's closed. */
   reading = false;
   private onDocumentClosed?: () => void;
@@ -107,10 +107,11 @@ export class Game {
     LEVELS[id](this);
   }
 
-  /** Show a numbered menu; the world pauses until the player picks (1–9) or steps back (Q). */
+  /** Show a menu; the world pauses until the player picks (arrow keys + Enter) or steps back (Q). */
   choose(title: string, options: { id: string; label: string }[], onPick: (id: string | null) => void): void {
-    this.choosing = { ids: options.map((o) => o.id), onPick };
+    this.choosing = { ids: options.map((o) => o.id), index: 0, onPick };
     this.hud.showChoice(title, options.map((o) => o.label));
+    this.hud.setChoiceIndex(0);
   }
 
   private finishChoice(id: string | null): void {
@@ -190,8 +191,13 @@ export class Game {
       if (closing) this.closeDocument();
       const choosing = this.choosing !== null;
       if (this.choosing) {
-        const n = this.choosing.ids.findIndex((_, i) => this.input.wasPressed(`Digit${i + 1}`) || this.input.wasPressed(`Numpad${i + 1}`));
-        if (n >= 0) this.finishChoice(this.choosing.ids[n]);
+        const c = this.choosing;
+        const step = (this.input.wasPressed('ArrowDown') ? 1 : 0) - (this.input.wasPressed('ArrowUp') ? 1 : 0);
+        if (step) {
+          c.index = (c.index + step + c.ids.length) % c.ids.length;
+          this.hud.setChoiceIndex(c.index);
+        }
+        if (this.input.wasPressed('Enter') || this.input.wasPressed('NumpadEnter')) this.finishChoice(c.ids[c.index]);
         else if (this.input.wasPressed('KeyQ') || this.input.wasPressed('Backspace')) this.finishChoice(null);
       }
       if (playing && !this.reading && !choosing) {

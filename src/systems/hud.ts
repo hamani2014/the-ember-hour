@@ -40,8 +40,8 @@ const CSS = `
 #hud .choice.show { display:flex; }
 #hud .choice .box { min-width:min(420px,80vw); border:1px solid rgba(255,170,90,.45); background:rgba(14,8,4,.92); padding:22px 28px; box-shadow:0 0 40px rgba(255,90,10,.25); }
 #hud .choice h2 { margin:0 0 14px; font-size:13px; letter-spacing:5px; font-weight:normal; color:#ffb070; text-transform:uppercase; }
-#hud .choice .opt { font-size:16px; padding:6px 0; color:#f2e2ca; }
-#hud .choice .opt b { color:#ffb070; font-weight:normal; margin-right:12px; }
+#hud .choice .opt { font-size:16px; padding:6px 10px; color:#f2e2ca; opacity:.55; border-left:2px solid transparent; }
+#hud .choice .opt.sel { opacity:1; color:#ffd2a0; border-left-color:#ffb070; background:rgba(255,120,40,.12); }
 #hud .choice .hint { margin-top:14px; font-size:11px; letter-spacing:3px; opacity:.6; }
 #hud .overlay { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; background:rgba(0,0,0,.72); }
 #hud .overlay.hidden { display:none; }
@@ -77,7 +77,7 @@ export class Hud {
       <div class="dawn"><div class="label">DAWN</div><div class="bar"><div class="fill"></div></div></div>
       <div class="title"><div class="main"></div><div class="subt"></div></div>
       <div class="cross"></div>
-      <div class="choice"><div class="box"><h2></h2><div class="opts"></div><div class="hint">[1]–[9] CHOOSE &middot; [Q] STEP BACK</div></div></div>
+      <div class="choice"><div class="box"><h2></h2><div class="opts"></div><div class="hint">[&uarr;][&darr;] SELECT &middot; [ENTER] OFFER &middot; [Q] STEP BACK</div></div></div>
       <div class="doc"><div class="paper"><h2></h2><div class="body"></div></div><div class="hint">[E] CLOSE</div></div>
       <div class="prompt"></div>
       <div class="sub"></div>
@@ -187,15 +187,18 @@ export class Hud {
     el.querySelector('h2')!.textContent = title;
     const opts = el.querySelector<HTMLElement>('.opts')!;
     opts.innerHTML = '';
-    labels.forEach((label, i) => {
+    labels.forEach((label) => {
       const row = document.createElement('div');
       row.className = 'opt';
-      const key = document.createElement('b');
-      key.textContent = `[${i + 1}]`;
-      row.append(key, document.createTextNode(label));
+      row.textContent = label;
       opts.appendChild(row);
     });
     el.classList.add('show');
+  }
+
+  /** Highlight the selected menu row. */
+  setChoiceIndex(index: number): void {
+    this.root.querySelectorAll('.choice .opt').forEach((row, i) => row.classList.toggle('sel', i === index));
   }
 
   hideChoice(): void {

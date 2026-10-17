@@ -50,17 +50,11 @@ export class GameAudio {
 
   // Behaviour timers.
   private lastSteps = 0;
-  private lastEntityDistance = 0;
-  private entityStepTimer = 0;
-  private echoSteps = 0;
-  private echoTimer = 0;
-  private wasMoving = false;
-  private whisperTimer = 3;
   private heartTimer = 0;
   private creakTimer = 6;
-  private smotherTimer = 0;
   private creepTimer = 10;
   private lastAttackSound = -10;
+  private lastEntitySound = -10;
   private walkLoop?: THREE.Audio;
   private runLoop?: THREE.Audio;
 
@@ -141,20 +135,14 @@ export class GameAudio {
   }
 
   private bindEvents(): void {
-    const { events, entity } = this.game;
+    const { events } = this.game;
+    // The entity only ever sounds like its own recordings (src/assets/audio/sfx/entity*.mp3).
     events.on('wake', () => {
-      this.play('creak', { attach: entity.group, volume: 1, refDistance: 3 });
-      this.whisperTimer = 2.5;
+      this.creepTimer = 0;
     });
-    events.on('lunge', () => {
-      this.entityAttack();
-      this.play('gust', { volume: 0.8 });
-    });
+    events.on('lunge', () => this.entityAttack());
     events.on('close', () => this.entityAttack());
-    events.on('caught', () => {
-      this.play('shriek', { volume: 0.7, rate: 0.55 });
-      this.play('thud', { volume: 1, rate: 0.6 });
-    });
+    events.on('caught', () => this.entityAttack(true));
     events.on('extinguish', () => this.play('gust', { volume: 0.6, rate: 0.8 }));
     events.on('ignite', (at) => this.play('whoosh', { at, volume: 0.9 }));
     events.on('burn', (at) => this.play('burn', { at, volume: 1 }));
@@ -168,11 +156,11 @@ export class GameAudio {
     events.on('turn', (at) => this.play('clank', { at, volume: 0.45, rate: rand(1.8, 2.2), refDistance: 1.5 }));
     events.on('shatter', (at) => this.play('shatter', { at, volume: 1, refDistance: 3 }));
     events.on('creak', (at) => this.play('creak', { at, volume: 0.9, rate: rand(1.0, 1.3), refDistance: 2 }));
-    events.on('retreat', () => {
-      this.play('gust', { attach: entity.group, volume: 0.7, rate: 0.5, refDistance: 3 });
-      this.play('whisper', { attach: entity.group, offset: new THREE.Vector3(0, 2, 0), volume: 0.8, rate: 0.75, refDistance: 2 });
+    events.on('retreat', () => this.entityCreep());
+    events.on('glimpse', () => {
+      this.lastEntitySound = this.ctx.currentTime;
+      this.play('entityLook', { volume: ENTITY_GAIN, rate: rand(0.95, 1.05) });
     });
-    events.on('glimpse', () => this.play(this.bank.has('entityLook') ? 'entityLook' : 'sting', { volume: ENTITY_GAIN, rate: rand(0.95, 1.05) }));
     events.on('draft', () => this.play('gust', { volume: 0.75, rate: rand(0.7, 0.9) }));
     events.on('pickup', () => this.play('rustle', { volume: 0.7 }));
     events.on('refuel', () => {
@@ -182,15 +170,19 @@ export class GameAudio {
   }
 
   /** Its charge / strike: the recorded attack sound, not repeated while one is still ringing out. */
-  private entityAttack(): void {
+  private entityAttack(force = false): void {
     const now = this.ctx.currentTime;
-    if (now - this.lastAttackSound < 2.5) return;
-    this.lastAttackSound = now;
-    if (!this.bank.has('entityAttack')) {
-      this.play('shriek', { attach: this.game.entity.group, offset: new THREE.Vector3(0, 2, 0), volume: 1, refDistance: 4 });
-      return;
-    }
+    if (!force && now - this.lastAttackSound < 2.5) return;
+    this.lastAttackSound = this.lastEntitySound = now;
     this.play('entityAttack', { attach: this.game.entity.group, offset: new THREE.Vector3(0, 1.5, 0), volume: ENTITY_GAIN, refDistance: 5 });
+  }
+
+  /** It moving about out in the dark — loud enough to carry over everything else. */
+  private entityCreep(): void {
+    const now = this.ctx.currentTime;
+    if (now - this.lastEntitySound < 3) return; // let the last one ring out first
+    this.lastEntitySound = now;
+    this.play('entityCreep', { attach: this.game.entity.group, offset: new THREE.Vector3(0, 0.5, 0), volume: ENTITY_GAIN * 1.2, rate: rand(0.92, 1.05), refDistance: 7 });
   }
 
   /** Suspend everything while paused; resume on play (browsers need a prior click for this). */
@@ -303,63 +295,11 @@ export class GameAudio {
   }
 
   private updateEntity(dt: number): void {
-    const { player, entity } = this.game;
-
-    // Its footsteps whenever it closes the distance — faster when hunting.
-    const approaching = this.lastEntityDistance - entity.distance > 0.25 * dt;
-    this.lastEntityDistance = entity.distance;
-    this.entityStepTimer -= dt;
-    if (approaching && this.entityStepTimer <= 0) {
-      this.play('thud', { attach: entity.group, volume: 0.9 * ENTITY_GAIN, rate: rand(0.8, 1), refDistance: 2 });
-      this.entityStepTimer = entity.mode === 'hunt' || entity.mode === 'lunge' ? 0.32 : 0.8;
-    }
-
-    // Stop walking, and sometimes its steps carry on a moment after yours.
-    const moving = player.state !== 'still';
-    if (this.wasMoving && !moving && Math.random() < 0.45) {
-      this.echoSteps = Math.random() < 0.5 ? 1 : 2;
-      this.echoTimer = 0.35;
-    }
-    this.wasMoving = moving;
-    if (this.echoSteps > 0) {
-      this.echoTimer -= dt;
-      if (this.echoTimer <= 0) {
-        this.play('thud', { attach: entity.group, volume: 0.7 * ENTITY_GAIN, rate: rand(0.85, 1), refDistance: 2 });
-        this.echoSteps--;
-        this.echoTimer = 0.45;
-      }
-    }
-
-    // Whispers from its head, more often and louder the closer it gets.
-    const near = clamp(1 - entity.distance / 10, 0, 1);
-    this.whisperTimer -= dt;
-    if (this.whisperTimer <= 0) {
-      this.play('whisper', {
-        attach: entity.group,
-        offset: new THREE.Vector3(0, 2, 0),
-        volume: (0.35 + 0.65 * near) * ENTITY_GAIN,
-        rate: rand(0.85, 1.1),
-        refDistance: 1.5,
-      });
-      this.whisperTimer = entity.held ? rand(1.1, 2.0) : lerp(9, 2, near) * rand(0.6, 1.4);
-    }
-
-    // Now and then, it creeps about somewhere out in the dark.
+    // Every few seconds it creeps about somewhere in the dark, whether you're watching or not.
     this.creepTimer -= dt;
     if (this.creepTimer <= 0) {
-      if (this.bank.has('entityCreep') && !entity.attacking) {
-        this.play('entityCreep', { attach: entity.group, offset: new THREE.Vector3(0, 0.5, 0), volume: ENTITY_GAIN, rate: rand(0.9, 1.05), refDistance: 4 });
-      }
-      this.creepTimer = rand(9, 24);
-    }
-
-    // Wind tearing at the flame while it's smothering you.
-    if (entity.smothering) {
-      this.smotherTimer -= dt;
-      if (this.smotherTimer <= 0) {
-        this.play('gust', { volume: 0.7, rate: rand(0.9, 1.2) });
-        this.smotherTimer = 0.9;
-      }
+      this.entityCreep();
+      this.creepTimer = rand(5, 11);
     }
   }
 }

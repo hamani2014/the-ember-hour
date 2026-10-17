@@ -228,10 +228,15 @@ export function buildPrologue(game: Game): void {
     car.add(lamp, beam, beam.target);
     return beam;
   });
-  for (const x of [-0.65, 0.65]) part([x, 0.65, 2.21], [0.25, 0.1, 0.03], lambert({ color: 0x6a0a0a, emissive: 0x3a0000 }));
-  const tailGlow = new THREE.PointLight(0x9a1008, 0.9, 4.5, 1.5); // dim hazard glow: the way to the trunk
-  tailGlow.position.set(0, 0.8, 2.8);
-  car.add(tailGlow);
+  // Tail lights: a soft red glow on the wet road behind the car, the way to the trunk.
+  const tailMat = new THREE.MeshBasicMaterial({ color: 0xd8301e, fog: false });
+  for (const x of [-0.65, 0.65]) {
+    const lamp = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.1, 0.03), tailMat);
+    lamp.position.set(x, 0.65, 2.21);
+    const glow = new THREE.PointLight(0xff2a18, 1.3, 6, 1.5);
+    glow.position.set(x, 0.65, 2.45);
+    car.add(lamp, glow);
+  }
   const trunkLamp = new THREE.PointLight(0xffe0b0, 0, 2.6, 1.5);
   trunkLamp.position.set(0, 1.25, 1.75);
   car.add(trunkLamp);

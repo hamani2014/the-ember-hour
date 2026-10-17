@@ -141,7 +141,7 @@ const ambience: Gen = (out, sr, rand) => {
       Math.sin(TAU * 110.6 * t) * 0.08;
     if (i % 64 === 0) wind.bandpass(350 + 250 * Math.sin(TAU * 0.05 * t) + 120 * Math.sin(TAU * 0.13 * t), 1.4);
     const w = wind.process(noise(rand)) * (0.55 + 0.45 * Math.sin(TAU * 0.09 * t + 1));
-    out[i] = drone * 0.3 + w * 1.1;
+    out[i] = drone * 0.3 + w * 0.2; // wind kept faint: indoors it read as rain and buried the entity
   }
 };
 
