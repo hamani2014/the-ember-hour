@@ -373,3 +373,44 @@ export function raindropsTexture(): THREE.CanvasTexture {
     }
   });
 }
+
+/** A long, pale, half-formed face: hollow sockets, a stretched gash of a mouth, soft edges. Never quite clear. */
+export function faceTexture(): THREE.CanvasTexture {
+  const tex = canvasTexture(48, 64, 421, (g, r) => {
+    const img = g.createImageData(48, 64);
+    for (let y = 0; y < 64; y++) {
+      for (let x = 0; x < 48; x++) {
+        const nx = (x - 23.5) / 17;
+        const ny = (y - 30) / 28;
+        const d = Math.sqrt(nx * nx + ny * ny);
+        const i = (y * 48 + x) * 4;
+        const shade = 150 + (r() - 0.5) * 50 - ny * 30;
+        img.data[i] = shade;
+        img.data[i + 1] = shade * 0.93;
+        img.data[i + 2] = shade * 0.88;
+        img.data[i + 3] = Math.max(0, 1 - d) ** 0.6 * 255;
+      }
+    }
+    g.putImageData(img, 0, 0);
+    g.fillStyle = 'rgba(0,0,0,0.92)';
+    g.beginPath();
+    g.ellipse(16, 24, 5, 7, 0.2, 0, Math.PI * 2); // sockets
+    g.ellipse(32, 24, 5, 7, -0.2, 0, Math.PI * 2);
+    g.fill();
+    g.beginPath();
+    g.ellipse(24, 46, 4, 11, 0, 0, Math.PI * 2); // stretched mouth
+    g.fill();
+    g.fillStyle = 'rgba(20,10,10,0.7)';
+    for (let k = 0; k < 7; k++) {
+      let x = 10 + r() * 28;
+      let y = 6 + r() * 50;
+      for (let s = 0; s < 14; s++) {
+        g.fillRect(Math.floor(x), Math.floor(y), 1, 1);
+        x += (r() - 0.5) * 2;
+        y += 1;
+      }
+    }
+  });
+  tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
+  return tex;
+}

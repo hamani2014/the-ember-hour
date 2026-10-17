@@ -17,6 +17,7 @@ export interface GameEvents {
   turn: THREE.Vector3; // a mechanism (mirror) rotated
   shatter: THREE.Vector3; // glass / crystal cracking
   draft: void; // the entity blows a cold draft at the flame
+  glimpse: void; // the player turns and catches sight of the entity
 }
 
 type Args<T> = T extends void ? [] : [T];

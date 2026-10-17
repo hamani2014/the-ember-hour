@@ -132,6 +132,7 @@ export class GameAudio {
     events.on('rift', () => this.play('rift', { volume: 1 }));
     events.on('turn', (at) => this.play('clank', { at, volume: 0.45, rate: rand(1.8, 2.2), refDistance: 1.5 }));
     events.on('shatter', (at) => this.play('shatter', { at, volume: 1, refDistance: 3 }));
+    events.on('glimpse', () => this.play('sting', { volume: 0.75, rate: rand(0.95, 1.05) }));
     events.on('draft', () => this.play('gust', { volume: 0.75, rate: rand(0.7, 0.9) }));
     events.on('pickup', () => this.play('rustle', { volume: 0.7 }));
     events.on('refuel', () => {

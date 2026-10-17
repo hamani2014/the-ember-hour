@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { Game } from '../core/game';
-import { textures } from '../core/textures';
+import { faceTexture, textures } from '../core/textures';
 import { lambert } from '../core/ps1';
 
 export type EntityPhase = 1 | 2 | 3 | 4;
@@ -45,9 +45,12 @@ const DRAFT_COST = 6; // fuel a draft blows away
 const CHASE_SPEED = 0.97; // × hunt speed while chasing at mid range (a sprint is 4.4 m/s)
 const CHASE_BAND: [number, number] = [3.5, 6]; // metres: closer → it eases off, further → it surges
 const CHASE_LEASH = 12; // metres — it never falls further behind than this
+const GLIMPSE_COOLDOWN = 9; // seconds between 'caught sight of it' scares
 
 interface Puff {
   sprite: THREE.Sprite;
+  /** Additive ember-red sprite drawn behind it: the smouldering rim that makes it readable in the dark. */
+  halo: THREE.Sprite;
   angle: number;
   radius: number;
   y: number;
@@ -85,6 +88,14 @@ export class Chronophage {
   private puffs: Puff[] = [];
   private eyeMaterial: THREE.SpriteMaterial;
   private smoke: THREE.SpriteMaterial;
+  private haloMaterial: THREE.SpriteMaterial;
+  private faceMaterial: THREE.SpriteMaterial;
+  /** 0..1 — how much the torchlight reveals it (distance-based). */
+  private reveal = 0;
+  /** 0..1 — the jolt of first catching sight of it; decays. */
+  private flash = 0;
+  private wasInView = false;
+  private glimpseCooldown = 0;
   /** Phase 4: the vortex is full of eyes. */
   private extraEyes = new THREE.Group();
   /** Turned to obsidian (ending B): no thinking, no moving. */
@@ -95,10 +106,13 @@ export class Chronophage {
   constructor(private game: Game) {
     const smoke = new THREE.SpriteMaterial({ map: textures.smoke(), color: 0x000000, transparent: true, opacity: 0.92, depthWrite: false });
     this.smoke = smoke;
+    this.haloMaterial = new THREE.SpriteMaterial({ map: textures.smoke(), color: 0x6a200c, transparent: true, opacity: 0.3, blending: THREE.AdditiveBlending, depthWrite: false });
     const addPuff = (angle: number, radius: number, y: number, size: number) => {
       const sprite = new THREE.Sprite(smoke);
-      this.body.add(sprite);
-      this.puffs.push({ sprite, angle, radius, y, size, spin: (Math.random() - 0.5) * 2 });
+      const halo = new THREE.Sprite(this.haloMaterial);
+      halo.renderOrder = -1; // drawn first, so the black soot covers its middle and only the rim glows
+      this.body.add(halo, sprite);
+      this.puffs.push({ sprite, halo, angle, radius, y, size, spin: (Math.random() - 0.5) * 2 });
     };
     // Torso column, thick in the middle and narrowing to the shoulders.
     for (let i = 0; i < 34; i++) {
@@ -113,11 +127,20 @@ export class Chronophage {
       for (let i = 0; i < 8; i++) addPuff(side > 0 ? 0 : Math.PI, 0.35 + i * 0.12, 1.6 - i * 0.13, 0.5 - i * 0.03);
     }
 
-    this.eyeMaterial = new THREE.SpriteMaterial({ color: 0xffc89a, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false });
-    for (const x of [-0.08, 0.08]) {
+    // A pale, half-formed face in the soot, only ever half seen.
+    this.faceMaterial = new THREE.SpriteMaterial({ map: faceTexture(), color: 0xb8aca2, transparent: true, opacity: 0, depthWrite: false });
+    const face = new THREE.Sprite(this.faceMaterial);
+    face.scale.set(0.42, 0.56, 1);
+    face.position.set(0, 2.08, 0.3);
+    face.renderOrder = 1;
+    this.body.add(face);
+
+    this.eyeMaterial = new THREE.SpriteMaterial({ color: 0xffa860, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false });
+    for (const x of [-0.075, 0.075]) {
       const eye = new THREE.Sprite(this.eyeMaterial);
-      eye.scale.setScalar(0.05);
-      eye.position.set(x, 2.1, 0.22);
+      eye.scale.setScalar(0.07);
+      eye.position.set(x, 2.15, 0.33);
+      eye.renderOrder = 2;
       this.body.add(eye);
     }
 
@@ -200,13 +223,36 @@ export class Chronophage {
     this.smoke.color.set(0x16141c);
     this.smoke.opacity = 1;
     this.eyeMaterial.opacity = 0.95;
+    this.faceMaterial.opacity = 0.55;
+    this.haloMaterial.opacity = 0.15;
   }
 
   update(dt: number, t: number): void {
     if (this.mode === 'dormant' || this.frozen) return;
     if (this.mode !== 'caught') this.think(dt);
     this.place();
-    this.animate(t);
+    this.perceive(dt);
+    this.animate(t, dt);
+  }
+
+  /** Is the player looking at it right now? Turning round onto it triggers a scare. */
+  private perceive(dt: number): void {
+    const { player, torch } = this.game;
+    this.tmp.copy(this.group.position).sub(player.feet).setY(0);
+    const d = this.tmp.length();
+    this.tmp.normalize();
+    player.forward(this.facing);
+    const inView = this.facing.dot(this.tmp) > 0.82 && d < 11;
+    this.glimpseCooldown -= dt;
+    if (inView && !this.wasInView && this.glimpseCooldown <= 0 && this.mode !== 'caught') {
+      this.flash = 1;
+      this.glimpseCooldown = GLIMPSE_COOLDOWN;
+      this.game.events.emit('glimpse');
+    }
+    this.wasInView = inView;
+    this.flash = Math.max(0, this.flash - dt * 0.8);
+    const reach = torch.lit ? torch.light.distance * 0.9 : 2.5;
+    this.reveal = THREE.MathUtils.clamp((reach - d) / 4, 0, 1);
   }
 
   private think(dt: number): void {
@@ -400,16 +446,29 @@ export class Chronophage {
     this.group.lookAt(this.tmp);
   }
 
-  private animate(t: number): void {
+  private animate(t: number, dt: number): void {
     const agitation = this.mode === 'lunge' ? 2.2 : this.mode === 'hunt' || this.exposed ? 1.5 : 1;
     this.puffs.forEach((p, i) => {
       const a = p.angle + t * p.spin * agitation;
       const r = p.radius * (1 + 0.25 * Math.sin(t * 1.3 * agitation + i));
       p.sprite.position.set(Math.cos(a) * r, p.y + Math.sin(t * 2 + i) * 0.06 * agitation, Math.sin(a) * r);
-      p.sprite.scale.setScalar(p.size * (1 + 0.18 * Math.sin(t * 3 * agitation + i * 1.7)));
+      const size = p.size * (1 + 0.18 * Math.sin(t * 3 * agitation + i * 1.7));
+      p.sprite.scale.setScalar(size);
+      p.halo.position.copy(p.sprite.position);
+      p.halo.scale.setScalar(size * 1.4);
     });
     const blink = Math.sin(t * 0.9) > 0.97 ? 0 : 1;
-    this.eyeMaterial.opacity = THREE.MathUtils.clamp((5 - this.distance) / 3, 0, 1) * 0.9 * blink;
+    const flicker = 0.85 + Math.sin(t * 17) * 0.1 + (Math.random() - 0.5) * 0.1;
+    // Always a faint ember rim so its shape reads in the dark; much brighter when the light is on it.
+    this.haloMaterial.opacity = Math.min(1, (0.36 + 0.35 * this.reveal + 0.45 * this.flash) * flicker);
+    this.faceMaterial.opacity = Math.min(0.9, (0.14 + 0.5 * this.reveal + 0.6 * this.flash) * flicker);
+    this.eyeMaterial.opacity = Math.min(1, Math.max(0.35 + THREE.MathUtils.clamp((8 - this.distance) / 4, 0, 1) * 0.6, this.flash) * blink);
+    // Shedding embers and ash as it moves.
+    if (Math.random() < dt * (4 + 6 * this.reveal)) {
+      const s = this.config.scale;
+      const at = this.group.position.clone().add(new THREE.Vector3((Math.random() - 0.5) * 0.7 * s, (0.3 + Math.random() * 1.8) * s, (Math.random() - 0.5) * 0.7 * s));
+      this.game.embers.emit(at, 1, 0.1, 0.5);
+    }
   }
 
   /** XZ angle (atan2(z, x)) pointing directly behind the player. */

@@ -29,7 +29,8 @@ export type SoundKey =
   | 'rain'
   | 'static'
   | 'thunder'
-  | 'match';
+  | 'match'
+  | 'sting';
 
 type Gen = (out: Float32Array, sr: number, rand: () => number) => void;
 
@@ -583,6 +584,26 @@ const match: Gen = (out, sr, rand) => {
   }
 };
 
+/** Horror sting: a dissonant string-like cluster stabbed hard, with a low boom and a rising scrape. */
+const sting: Gen = (out, sr, rand) => {
+  const notes = [233.1, 246.9, 349.2, 370.0, 493.9, 523.3];
+  const phases = notes.map(() => 0);
+  const scrape = new Biquad(sr).bandpass(1800, 3);
+  let boom = 0;
+  for (let i = 0; i < out.length; i++) {
+    const t = i / sr;
+    const env = Math.min(1, t / 0.01) * Math.exp(-t / 0.7);
+    let s = 0;
+    notes.forEach((f, k) => {
+      phases[k] = (phases[k] + (f * (1 + 0.004 * Math.sin(TAU * (5 + k) * t))) / sr) % 1;
+      s += (phases[k] * 2 - 1) * (1 / notes.length);
+    });
+    boom += (TAU * (55 * Math.exp(-t / 0.3) + 30)) / sr;
+    if (i % 32 === 0) scrape.bandpass(900 + 2600 * Math.min(1, t / 1.2), 3);
+    out[i] = Math.tanh(s * 2.2) * env * 0.8 + Math.sin(boom) * Math.exp(-t / 0.35) * 0.9 + scrape.process(noise(rand)) * Math.min(1, t / 0.3) * Math.exp(-t / 0.9) * 0.5;
+  }
+};
+
 /** Build every sound. Keys with several entries are random variations. */
 export function synthesizeAll(ctx: BaseAudioContext): Record<SoundKey, AudioBuffer[]> {
   const variants = (count: number, seconds: (i: number) => number, seed: number, gen: Gen) =>
@@ -614,5 +635,6 @@ export function synthesizeAll(ctx: BaseAudioContext): Record<SoundKey, AudioBuff
     static: [render(ctx, 5, 24, radioStatic, true)],
     thunder: [render(ctx, 4.5, 25, thunder)],
     match: [render(ctx, 0.7, 26, match)],
+    sting: [render(ctx, 2.2, 27, sting)],
   };
 }
