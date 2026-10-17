@@ -21,7 +21,7 @@ Paste this whole file into a new chat (or tell Claude to read `HANDOFF.md`, `CLA
 - **Build:** `npm run build` (tsc + vite). Node 24, Vite 8, TypeScript 7, three 0.186. Windows 11, OneDrive folder.
 - **Docs in repo:** `CLAUDE.md` (architecture + rules for AI agents — read it first), `STORY.md` (story bible), `README.md` (for judges).
 - **Live:** https://the-ember-hour.vercel.app (Vercel project `ember-hour/the-ember-hour`, deployed with `npx.cmd vercel deploy --prod --yes`; PowerShell blocks `npx.ps1`, so use `npx.cmd`).
-- **Not done:** GitHub repo not created (user hasn't run `gh auth login`; `gh` is installed). Deploy is prepared as a GitHub Pages workflow (`.github/workflows/deploy.yml`, `vite base: './'`) — needs the repo + Pages enabled (source: GitHub Actions). No Vercel account.
+- **Repo:** https://github.com/hamani2014/the-ember-hour (public). The old GitHub Pages workflow was removed — Vercel hosts the game.
 
 ## 3. Tech & architecture (short — details in CLAUDE.md)
 
