@@ -17,6 +17,8 @@ import { LEVELS, type LevelId } from '../levels';
 
 /** Fuel the torch is topped up to after being caught. */
 const RESPAWN_FUEL = 50;
+/** Hearts: each completed attack takes one; lose them all and you die back to the last hearth. */
+const MAX_HEARTS = 3;
 
 /** Owns every core system. Levels receive this and build into `world`. */
 export class Game {
@@ -37,6 +39,8 @@ export class Game {
   readonly entity: Chronophage;
   readonly audio: GameAudio;
   readonly events = new Events<GameEvents>();
+  hearts = MAX_HEARTS;
+  private dead = false;
   /** Where the player wakes up after the shadow takes them. Levels move this forward. */
   checkpoint = { x: 0, z: 0, yaw: 0 };
   level: LevelId | null = null;
@@ -75,6 +79,11 @@ export class Game {
     this.inventory.onChange = () => this.hud.setHeld(this.inventory.clues.map((c) => c.name));
     this.entity = new Chronophage(this);
     this.audio = new GameAudio(this);
+    this.hud.setHearts(this.hearts, MAX_HEARTS);
+
+    // Jumpscares: put a note down, or finish a puzzle, and it's suddenly there.
+    this.events.on('burn', () => this.tweens.delay(2.5, () => this.ambush()));
+    this.events.on('door', () => this.tweens.delay(2, () => this.ambush()));
   }
 
   /** Switch level at the start of the next frame. Clues in the inventory and torch fuel carry over. */
@@ -98,6 +107,8 @@ export class Game {
     this.torch.setHeld(true);
     this.hud.setFuelVisible(true);
     this.hud.setCinematic(false);
+    this.hud.showDied(false);
+    this.dead = false;
     if (this.reading) this.closeDocument();
     if (this.choosing) {
       this.choosing = null;
@@ -135,6 +146,49 @@ export class Game {
     const done = this.onDocumentClosed;
     this.onDocumentClosed = undefined;
     done?.();
+    this.tweens.delay(0.4, () => this.ambush());
+  }
+
+  private ambush(): void {
+    if (this.controlsLocked || this.reading || this.dead || this.hud.cinematic) return;
+    this.entity.ambush();
+  }
+
+  /** The entity's attack landed: lose a heart. Returns true if that was the last one. */
+  hurt(): boolean {
+    if (this.dead) return true;
+    this.hearts = Math.max(0, this.hearts - 1);
+    this.hud.setHearts(this.hearts, MAX_HEARTS);
+    if (this.hearts > 0) return false;
+    this.die();
+    return true;
+  }
+
+  /** Back to full hearts (hearths). */
+  heal(): void {
+    this.hearts = MAX_HEARTS;
+    this.hud.setHearts(this.hearts, MAX_HEARTS);
+  }
+
+  /** Out of hearts: the death card, then back to the last hearth with the flame relit. */
+  private die(): void {
+    this.dead = true;
+    this.controlsLocked = true;
+    this.player.shake = 0.15;
+    this.events.emit('caught');
+    this.hud.fade(1, 1.2);
+    this.hud.showDied(true);
+    this.tweens.delay(4, () => {
+      const { x, z, yaw } = this.checkpoint;
+      this.player.spawn(x, z, yaw);
+      this.torch.refuel(Math.max(0, RESPAWN_FUEL - this.torch.fuel));
+      this.entity.reset();
+      this.heal();
+      this.dead = false;
+      this.controlsLocked = false;
+      this.hud.showDied(false);
+      this.hud.fade(0, 1.5);
+    });
   }
 
   /** Spoken warnings as the flame runs low (re-armed once it's topped back up). */

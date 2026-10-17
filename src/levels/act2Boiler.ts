@@ -210,7 +210,7 @@ export function buildAct2Boiler(game: Game): void {
     size: [1.6, 1.2],
     rot: [0, Math.PI / 2, 0],
     material: lambert({
-      map: chalkboardTexture(['PILOT BURNERS — NIGHT ROTA', '', '   II  ........ 04:00', '   IV  ........ 06:00', '   I   ........ 01:00', '   III ........ 03:00', '', 'LIGHT IN ORDER OF THE HOUR']),
+      map: chalkboardTexture(['PILOT BURNERS — NIGHT ROTA', '', '   II  ........ 04:00', '   IV  ........ 06:00', '   I   ........ 01:00', '   III ........ 03:00']),
     }),
   });
 

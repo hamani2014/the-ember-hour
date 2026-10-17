@@ -23,12 +23,12 @@ interface PhaseConfig {
   attackTime: number;
 }
 
-/** Each act the entity grows bolder, faster and bigger. Act IV attacks every 4–6 s. */
+/** Each act the entity grows bolder, faster and bigger. Act IV attacks every 12–18 s. */
 const PHASES: Record<EntityPhase, PhaseConfig> = {
-  1: { hunt: 2.6, hearing: 10, lurk: 9, scale: 1.0, rage: 0.3, attackEvery: [16, 24], attackTime: 3.5 },
-  2: { hunt: 3.4, hearing: 14, lurk: 8, scale: 1.25, rage: 0.4, attackEvery: [12, 16], attackTime: 3.2 },
-  3: { hunt: 4.2, hearing: 18, lurk: 7, scale: 1.6, rage: 0.5, attackEvery: [8, 12], attackTime: 3.0 },
-  4: { hunt: 5.0, hearing: 22, lurk: 6, scale: 2.0, rage: 0.65, attackEvery: [4, 6], attackTime: 3.0 },
+  1: { hunt: 2.6, hearing: 10, lurk: 9, scale: 1.0, rage: 0.3, attackEvery: [30, 42], attackTime: 3.5 },
+  2: { hunt: 3.4, hearing: 14, lurk: 8, scale: 1.25, rage: 0.4, attackEvery: [24, 34], attackTime: 3.2 },
+  3: { hunt: 4.2, hearing: 18, lurk: 7, scale: 1.6, rage: 0.5, attackEvery: [18, 26], attackTime: 3.0 },
+  4: { hunt: 5.0, hearing: 22, lurk: 6, scale: 2.0, rage: 0.65, attackEvery: [12, 18], attackTime: 3.0 },
 };
 
 const CATCH_DISTANCE = 1.1;
@@ -51,7 +51,9 @@ const GLIMPSE_COOLDOWN = 9; // seconds between 'caught sight of it' scares
 const ATTACK_DISTANCE: [number, number] = [5.5, 7.5]; // how far away it appears when it charges
 const ATTACK_ANGLE: [number, number] = [0.12, 0.5]; // radians off your line of sight it appears at
 const LOOK_AWAY_CONE = 0.55; // facing it less directly than this (cos ~57°) counts as looking away
-const HIT_COST = 35; // fuel its blow tears from the torch
+const HIT_COST = 20; // fuel its blow tears from the torch (each hit also costs a heart)
+const AMBUSH_HOLD = 1; // seconds a jumpscare stands still in view before it charges — your head start
+const AMBUSH_COOLDOWN = 25; // seconds between jumpscares
 const STALL_HOLD = 1.1; // seconds it stands frozen after you look away
 const BACK_OFF_SPEED = 2.5; // m/s it backs away before melting into the dark
 const TAU = Math.PI * 2;
@@ -92,7 +94,8 @@ export class Chronophage {
   /** True while it stands frozen because you looked away mid-charge. */
   held = false;
   /** The attack in progress, if any. */
-  private attack: { pos: THREE.Vector3; stage: 'charge' | 'stalled' | 'retreat'; timer: number; speed: number; unstoppable: boolean; close?: boolean } | null = null;
+  private attack: { pos: THREE.Vector3; stage: 'charge' | 'stalled' | 'retreat'; timer: number; speed: number; unstoppable: boolean; hold: number; close?: boolean } | null = null;
+  private ambushCooldown = 0;
   private attackTimer = 0;
   /** 0..1 — fades it out as it melts back into the dark after an attack. */
   private fade = 1;
@@ -299,6 +302,22 @@ export class Chronophage {
     if (this.mode !== 'dormant') this.mode = 'lurk';
   }
 
+  /** Seconds until its next attack (0 while one is under way). */
+  get nextAttackIn(): number {
+    return this.attack ? 0 : this.attackTimer;
+  }
+
+  /**
+   * Jumpscare (a note put down, a puzzle solved): it is suddenly there in view, stands still for a
+   * second — your head start — then charges like any other attack. Rate-limited.
+   */
+  ambush(): boolean {
+    if (this.mode === 'dormant' || this.mode === 'caught' || this.frozen || this.chasePos || this.attack || this.ambushCooldown > 0) return false;
+    this.ambushCooldown = AMBUSH_COOLDOWN;
+    this.beginAttack(false, AMBUSH_HOLD);
+    return true;
+  }
+
   /** Something loud happened — it comes for you soon. */
   alert(): void {
     if (!this.attack && this.mode !== 'dormant') this.attackTimer = Math.min(this.attackTimer, 1);
@@ -325,6 +344,7 @@ export class Chronophage {
 
   update(dt: number, t: number): void {
     if (this.mode === 'dormant' || this.frozen) return;
+    this.ambushCooldown = Math.max(0, this.ambushCooldown - dt);
     if (this.mode !== 'caught') this.think(dt);
     this.place();
     this.perceive(dt);
@@ -426,7 +446,7 @@ export class Chronophage {
   }
 
   /** It appears in your field of view — off to one side, a different side each time — and charges. */
-  private beginAttack(unstoppable: boolean): void {
+  private beginAttack(unstoppable: boolean, hold = 0): void {
     const { player } = this.game;
     const yaw = player.yaw;
     const lookAngle = Math.atan2(-Math.cos(yaw), -Math.sin(yaw)); // XZ angle of where you're looking
@@ -434,7 +454,7 @@ export class Chronophage {
     const a = lookAngle + this.lastSide * THREE.MathUtils.randFloat(...ATTACK_ANGLE);
     const d = THREE.MathUtils.randFloat(...ATTACK_DISTANCE);
     const pos = new THREE.Vector3(player.feet.x + Math.cos(a) * d, 0, player.feet.z + Math.sin(a) * d);
-    this.attack = { pos, stage: 'charge', timer: 0, speed: (d - CATCH_DISTANCE) / this.config.attackTime, unstoppable };
+    this.attack = { pos, stage: 'charge', timer: 0, speed: (d - CATCH_DISTANCE) / this.config.attackTime, unstoppable, hold };
     this.mode = 'hunt';
     this.held = false;
     this.fade = 1;
@@ -461,6 +481,10 @@ export class Chronophage {
         at.timer = 0;
         this.held = true;
         this.mode = 'lurk';
+      } else if (at.hold > 0) {
+        // Ambush: it just stands there, looking at you, for a heartbeat.
+        at.hold -= dt;
+        at.timer = Math.min(at.timer, 0.2);
       } else {
         const { dx, dz, d } = toPlayer();
         const step = Math.min(at.speed * (1 + at.timer * 0.2) * dt, d - MIN_DISTANCE);
@@ -504,6 +528,12 @@ export class Chronophage {
     player.shake = 0.12;
     events.emit('lunge');
     embers.emit(this.group.position.clone().setY(1.4), 40, 0.6, 2);
+    if (this.game.hurt()) {
+      // Out of hearts: Game.die() takes it from here.
+      this.attack = null;
+      this.mode = 'caught';
+      return;
+    }
     if (!torch.lit) {
       this.attack = null;
       this.mode = 'caught';

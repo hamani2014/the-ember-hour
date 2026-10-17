@@ -66,6 +66,7 @@ export function createHearth(game: Game, o: { position: THREE.Vector3; rotY?: nu
     interact: () => {
       const wasLow = game.torch.fuel < game.torch.maxFuel - 1;
       game.torch.refuel(game.torch.maxFuel);
+      game.heal();
       game.setCheckpoint(standAt.x, standAt.z, facing);
       game.events.emit('refuel');
       game.embers.emit(flamePos, 30, 0.2, 1.2);

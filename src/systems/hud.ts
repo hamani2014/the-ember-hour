@@ -11,6 +11,19 @@ const CSS = `
 #hud .fuel .fill { height:100%; width:100%; background:linear-gradient(90deg,#6a1404,#ff6a14,#ffd27a); }
 #hud .fuel.low .fill { animation: hud-pulse .6s infinite alternate; }
 @keyframes hud-pulse { from { opacity:1 } to { opacity:.3 } }
+#hud .hearts { position:absolute; right:26px; top:22px; display:flex; gap:7px; }
+#hud .hearts svg { width:35px; height:30px; filter:drop-shadow(0 0 3px #000) drop-shadow(0 0 1px #000); }
+#hud .hearts .px { fill:#d01a12; }
+#hud .hearts .hi { fill:#ff9a8a; }
+#hud .hearts .empty .px { fill:#2c0b08; }
+#hud .hearts .empty .hi { fill:#2c0b08; }
+#hud .hearts .lost { animation: heart-lost .6s; }
+@keyframes heart-lost { 0%,100% { transform:none; } 20% { transform:translate(-3px,1px) scale(1.25); } 50% { transform:translate(3px,-1px) scale(.9); } 75% { transform:translate(-2px,0); } }
+#hud.cinematic .hearts { display:none; }
+#hud .died { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; background:radial-gradient(ellipse at center, rgba(70,0,0,.55), rgba(0,0,0,.92)); opacity:0; pointer-events:none; transition:opacity 1s; }
+#hud .died.show { opacity:1; }
+#hud .died h1 { margin:0; font-size:52px; letter-spacing:12px; font-weight:normal; color:#c4140c; text-shadow:0 0 18px #600; }
+#hud .died p { margin-top:16px; font-size:12px; letter-spacing:5px; opacity:.7; }
 #hud .held { position:absolute; right:28px; bottom:28px; text-align:right; font-size:13px; line-height:1.6; opacity:.85; }
 #hud .vignette { position:absolute; inset:0; opacity:0; background:radial-gradient(ellipse at center, transparent 30%, rgba(0,0,0,.6) 65%, #000 100%); }
 #hud .fade { position:absolute; inset:0; background:#000; opacity:0; }
@@ -49,6 +62,18 @@ const CSS = `
 #hud .overlay p { opacity:.75; margin:5px 0; letter-spacing:1px; }
 `;
 
+/** A Minecraft-style pixel heart: 7x6 pixels with a highlight. */
+const HEART_SVG = (() => {
+  const rows = [' ## ## ', '#######', '#######', ' ##### ', '  ###  ', '   #   '];
+  let rects = '';
+  rows.forEach((row, y) =>
+    [...row].forEach((c, x) => {
+      if (c === '#') rects += `<rect class="${(x === 1 && y === 1) || (x === 2 && y === 0) ? 'hi' : 'px'}" x="${x}" y="${y}" width="1.02" height="1.02"/>`;
+    }),
+  );
+  return `<svg viewBox="0 0 7 6" shape-rendering="crispEdges">${rects}</svg>`;
+})();
+
 /** Pause between one spoken line ending and the next starting (seconds). */
 const SPEECH_GAP = 0.45;
 
@@ -84,6 +109,8 @@ export class Hud {
       <div class="doc"><div class="paper"><h2></h2><div class="body"></div></div><div class="hint">[E] CLOSE</div></div>
       <div class="prompt"></div>
       <div class="sub"></div>
+      <div class="hearts"></div>
+      <div class="died"><h1>YOU HAVE DIED</h1><p>THE FLAME REMEMBERS WHERE YOU LAST RESTED</p></div>
       <div class="fuel"><div class="label">FLAME</div><div class="bar"><div class="fill"></div></div></div>
       <div class="held"></div>
       <div class="overlay">
@@ -164,6 +191,27 @@ export class Hud {
 
   setFuelVisible(visible: boolean): void {
     this.fuel.style.display = visible ? '' : 'none';
+    this.root.querySelector<HTMLElement>('.hearts')!.style.display = visible ? '' : 'none';
+  }
+
+  /** Pixel hearts, top right. A heart lost this frame shakes. */
+  setHearts(count: number, max: number): void {
+    const el = this.root.querySelector<HTMLElement>('.hearts')!;
+    while (el.children.length < max) el.insertAdjacentHTML('beforeend', HEART_SVG);
+    [...el.children].forEach((heart, i) => {
+      const empty = i >= count;
+      if (empty && !heart.classList.contains('empty')) {
+        heart.classList.remove('lost');
+        void (heart as HTMLElement).offsetWidth; // restart the animation
+        heart.classList.add('lost');
+      }
+      heart.classList.toggle('empty', empty);
+    });
+  }
+
+  /** Death card over a red-black vignette. */
+  showDied(show: boolean): void {
+    this.root.querySelector('.died')!.classList.toggle('show', show);
   }
 
   setFuel(ratio: number): void {
@@ -188,6 +236,10 @@ export class Hud {
   }
 
   /** Letterbox bars and no gameplay HUD. */
+  get cinematic(): boolean {
+    return this.root.classList.contains('cinematic');
+  }
+
   setCinematic(on: boolean): void {
     this.root.classList.toggle('cinematic', on);
   }

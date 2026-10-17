@@ -299,11 +299,13 @@ export class GameAudio {
   }
 
   private updateEntity(dt: number): void {
-    // Every few seconds it creeps about somewhere in the dark, whether you're watching or not.
-    this.creepTimer -= dt;
+    // It creeps about in the dark: rarely while it's biding its time, more and more often as the
+    // next attack draws near — the sound itself is the warning.
+    const interval = lerp(22, 5, clamp(1 - this.game.entity.nextAttackIn / 25, 0, 1));
+    this.creepTimer = Math.min(this.creepTimer - dt, interval * 1.2);
     if (this.creepTimer <= 0) {
       this.entityCreep();
-      this.creepTimer = rand(5, 11);
+      this.creepTimer = interval * rand(0.8, 1.2);
     }
   }
 }

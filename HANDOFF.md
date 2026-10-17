@@ -55,7 +55,8 @@ Paste this whole file into a new chat (or tell Claude to read `HANDOFF.md`, `CLA
 - **Attack loop (current, requested last):** it lurks out of sight; every few seconds (phase table `attackEvery`: P1 16–24 s, P2 12–16, P3 8–12, **P4 4–6 s**) it **appears in the player's field of view off to one side and charges** over `attackTime` (~3 s). **If the player looks away** (facing it less than cos 0.55 ≈ 57°), it **stops dead, holds ~1 s, backs off, fades into the dark, and attacks again later from another angle.** If it reaches the player → **strike: −35 fuel**, shriek; if fuel hits 0 → caught → fade, respawn at last checkpoint (hearth) with ≥50 fuel. Sprinting (noise) makes the next attack come sooner. Torch out → the attack can't be stopped by looking away.
 - Act III corridor uses a separate **chase mode** (torchlight pushes back, rage → lunge) — unchanged.
 - Earlier rejected iterations (don't revert to these): "torch pushes it back" as the main mechanic; "it only moves while you look at it / freezes when not watched".
-- Tested: an attentive player (turns away within ~0.85 s) takes 0 hits over 40 s; a staring player gets hit twice in 25 s. A full Act IV run with it active completed with 0 catches.
+- **Now (latest):** attacks are rarer (P1 30–42 s … P4 12–18 s). Creep sounds are rare while it bides its time and speed up as the next attack nears. Jumpscare ambush after closing a note / burning a clue / a door crumbling (appears in view, 1 s head start, then a normal charge). **3 pixel hearts** top right: each landed attack = −1 heart (and −20 fuel); 0 hearts → YOU HAVE DIED → respawn at last hearth, full hearts. Hearths refill hearts.
+- Tested (older tuning): an attentive player (turns away within ~0.85 s) takes 0 hits over 40 s; a staring player gets hit twice in 25 s. A full Act IV run with it active completed with 0 catches.
 
 ## 6. Story (full version in STORY.md; all in-game text in `src/story.ts`)
 
