@@ -69,7 +69,7 @@ export function createHearth(game: Game, o: { position: THREE.Vector3; rotY?: nu
       game.setCheckpoint(standAt.x, standAt.z, facing);
       game.events.emit('refuel');
       game.embers.emit(flamePos, 30, 0.2, 1.2);
-      game.hud.say(wasLow ? 'The warmth steadies my hands. The flame is strong again.' : 'I’ll remember this fire. If it takes me, I’ll wake here.', 3.5);
+      game.hud.say(wasLow ? 'The warmth steadies my hands. The flame is strong again.' : 'Warm. For a moment, safe.', 3.5);
     },
   });
 }

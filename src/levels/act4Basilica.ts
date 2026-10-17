@@ -182,7 +182,8 @@ export function buildAct4Basilica(game: Game): void {
   let dawn = 0;
   let ended = false;
   let scrollTaken = false;
-  const accepts = [RITUAL[0].id];
+  const accepts = RITUAL.map((r) => r.id);
+  let burning = false;
   const tolls = new Set<number>();
 
   createBurnPoint(game, {
@@ -193,14 +194,19 @@ export function buildAct4Basilica(game: Game): void {
     flameSize: 3.4,
     lightCost: 10,
     onLit: () => game.hud.say('My last flask of oil. Make it count.'),
-    idlePrompt: () => (game.inventory.find(RITUAL.map((r) => r.id)) ? 'Not yet — the windows show the order' : null),
-    onBurn: () => {
+    choose: { prompt: 'Make an offering to the fire', title: 'Offer to the fire' },
+    onBurnStart: () => (burning = true),
+    onBurn: (clue) => {
+      burning = false;
+      if (ended) return;
+      if (clue.id !== RITUAL[step].id) {
+        endingB(true); // the rite is broken
+        return;
+      }
       step++;
       shockwave(1);
       game.audio.play('bell', { volume: 0.9 });
       if (step < RITUAL.length) {
-        accepts[0] = RITUAL[step].id;
-        game.hud.say(RITUAL[step - 1].line);
         if (game.entity.mode !== 'dormant') game.entity.reset(game.entity.config.lurk + 3);
       } else {
         endingA();
@@ -313,14 +319,11 @@ export function buildAct4Basilica(game: Game): void {
     car.add(wheel);
   }
   const lampMaterial = new THREE.MeshBasicMaterial({ color: 0x2a2620, fog: false });
-  const headlights = [-0.6, 0.6].map((x) => {
+  for (const x of [-0.6, 0.6]) {
     const lamp = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.15, 0.05), lampMaterial);
     lamp.position.set(x, 0.65, 2.21);
-    const light = new THREE.PointLight(0xfff0c0, 0, 14, 1.5);
-    light.position.set(x, 0.7, 2.7);
-    car.add(lamp, light);
-    return light;
-  });
+    car.add(lamp);
+  }
   car.position.set(STREET_X - 1.2, 0, -58);
   game.world.add(car);
 
@@ -394,7 +397,6 @@ export function buildAct4Basilica(game: Game): void {
     game.hud.say('It’s… breaking apart.', 2.5);
     beginCutscene(game);
     let birds: THREE.PositionalAudio | null = null;
-    let engine: THREE.PositionalAudio | null = null;
     const steps = new THREE.Vector3(STREET_X, 2.35, 2.4);
     playSequence(
       game,
@@ -425,32 +427,12 @@ export function buildAct4Basilica(game: Game): void {
             birds?.stop();
           },
         },
-        { duration: 3, start: () => (engine = game.audio.playLoop('engine', car, 1.4, 4)) },
-        {
-          duration: 6,
-          start: () => {
-            headlights.forEach((l) => (l.intensity = 3));
-            lampMaterial.color.set(0xfff0c0);
-            game.hud.fade(0, 2.5);
-          },
-          update: (k) => {
-            const rise = ease(Math.max(0, (k - 0.35) / 0.65));
-            look(new THREE.Vector3(STREET_X + 0.6, 0.18 + 1.42 * rise, -49.5), new THREE.Vector3(STREET_X - 0.4, 0.8 + rise * 0.4, -58), 0.5 * (1 - rise));
-          },
-        },
-        {
-          duration: 3,
-          start: () => {
-            engine?.stop();
-            game.audio.play('thud', { at: car.position, volume: 1, rate: 0.5, refDistance: 4 });
-            game.tweens.delay(0.25, () => game.audio.play('thud', { at: car.position, volume: 0.8, rate: 0.45, refDistance: 4 }));
-            headlights.forEach((l) => (l.intensity = 0));
-            lampMaterial.color.set(0x2a2620);
-          },
-        },
-        { duration: 2.2, start: () => game.hud.fade(1, 2, '#000') },
       ],
-      () => game.hud.endScreen('THE EMBER HOUR', 'ENDING A · THE LOOP'),
+      () => {
+        // The loop: it all starts again, and this time he knows it.
+        game.flags.add('looped');
+        game.loadLevel('prologue');
+      },
     );
   };
 
@@ -475,7 +457,7 @@ export function buildAct4Basilica(game: Game): void {
   hands.visible = false;
   game.camera.add(hands);
 
-  const endingB = () => {
+  const endingB = (brokenRite = false) => {
     let outside: ReturnType<typeof goOutside> | null = null;
     ended = true;
     game.hud.setDawn(null);
@@ -502,7 +484,7 @@ export function buildAct4Basilica(game: Game): void {
           duration: 4.5,
           start: () => {
             game.hud.fade(0.7, 3, '#fff8e8');
-            game.hud.say('The sun… it isn’t killing it. It’s turning it to stone.', 4);
+            game.hud.say(brokenRite ? 'No— that was wrong— the light, it’s coming in—' : 'The sun… it isn’t killing it. It’s turning it to stone.', 4);
           },
           update: (k) => {
             for (const m of glass) m.color.copy(DAWN).multiplyScalar(1 + k * 2);
@@ -601,7 +583,6 @@ export function buildAct4Basilica(game: Game): void {
       ritualActive = true;
       game.setCheckpoint(0, 6, 0);
       game.audio.play('bell', { volume: 0.8 });
-      game.hud.say('The windows show the order. Burn them all — before the sun comes up.', 5);
       game.tweens.delay(4, () => {
         if (game.entity.mode !== 'dormant' || ended) return;
         game.entity.activate(4);
@@ -609,8 +590,7 @@ export function buildAct4Basilica(game: Game): void {
       });
     }
     if (!ritualActive || ended) return;
-    const finalBurning = step === RITUAL.length - 1 && scrollTaken && !game.inventory.find(['altar-scroll']);
-    if (!finalBurning) dawn = Math.min(1, dawn + dt / DAWN_TIME);
+    if (!burning) dawn = Math.min(1, dawn + dt / DAWN_TIME);
     game.hud.setDawn(dawn);
     const light = dawn * dawn;
     for (const m of glass) m.color.copy(NIGHT).lerp(DAWN, light);
@@ -635,7 +615,6 @@ export function buildAct4Basilica(game: Game): void {
   game.hud.fade(0, 2.5);
   game.hud.title('ACT IV', 'THE CINDER BASILICA · BEFORE DAWN');
   game.tweens.delay(4.5, () => game.hud.say('A church. The doors sealed shut behind me.', 4));
-  game.tweens.delay(9.5, () => game.hud.say('Echoes of everything I burned are scattered through this place. The nave is through those doors.', 5));
 }
 
 /** Invisible, generous click target for small props. */

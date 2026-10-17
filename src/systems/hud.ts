@@ -36,6 +36,13 @@ const CSS = `
 #hud .doc .paper h2 { font-size:13px; letter-spacing:4px; text-transform:uppercase; margin:0 0 16px; color:#5a3418; font-weight:normal; border-bottom:1px solid rgba(90,52,24,.35); padding-bottom:8px; }
 #hud .doc .paper .body { white-space:pre-wrap; }
 #hud .doc .hint { position:absolute; bottom:7%; left:0; right:0; text-align:center; font-size:12px; letter-spacing:4px; opacity:.75; }
+#hud .choice { position:absolute; inset:0; display:none; align-items:center; justify-content:center; background:rgba(0,0,0,.55); }
+#hud .choice.show { display:flex; }
+#hud .choice .box { min-width:min(420px,80vw); border:1px solid rgba(255,170,90,.45); background:rgba(14,8,4,.92); padding:22px 28px; box-shadow:0 0 40px rgba(255,90,10,.25); }
+#hud .choice h2 { margin:0 0 14px; font-size:13px; letter-spacing:5px; font-weight:normal; color:#ffb070; text-transform:uppercase; }
+#hud .choice .opt { font-size:16px; padding:6px 0; color:#f2e2ca; }
+#hud .choice .opt b { color:#ffb070; font-weight:normal; margin-right:12px; }
+#hud .choice .hint { margin-top:14px; font-size:11px; letter-spacing:3px; opacity:.6; }
 #hud .overlay { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; background:rgba(0,0,0,.72); }
 #hud .overlay.hidden { display:none; }
 #hud .overlay h1 { font-size:44px; letter-spacing:12px; color:#ff9a4a; margin:0 0 18px; font-weight:normal; text-shadow:0 0 18px #ff5a0a; }
@@ -70,6 +77,7 @@ export class Hud {
       <div class="dawn"><div class="label">DAWN</div><div class="bar"><div class="fill"></div></div></div>
       <div class="title"><div class="main"></div><div class="subt"></div></div>
       <div class="cross"></div>
+      <div class="choice"><div class="box"><h2></h2><div class="opts"></div><div class="hint">[1]–[9] CHOOSE &middot; [Q] STEP BACK</div></div></div>
       <div class="doc"><div class="paper"><h2></h2><div class="body"></div></div><div class="hint">[E] CLOSE</div></div>
       <div class="prompt"></div>
       <div class="sub"></div>
@@ -135,7 +143,7 @@ export class Hud {
     this.fuelFill.style.width = `${(ratio * 100).toFixed(1)}%`;
     const low = ratio < 0.25;
     this.fuel.classList.toggle('low', low);
-    const label = low ? 'FLAME · FIND A HEARTH OR SOMETHING TO BURN' : 'FLAME';
+    const label = 'FLAME';
     if (this.fuelLabel.textContent !== label) this.fuelLabel.textContent = label;
   }
 
@@ -164,6 +172,26 @@ export class Hud {
     window.addEventListener('keydown', (e) => {
       if (e.code === 'KeyR') location.href = location.pathname;
     });
+  }
+
+  showChoice(title: string, labels: string[]): void {
+    const el = this.root.querySelector<HTMLElement>('.choice')!;
+    el.querySelector('h2')!.textContent = title;
+    const opts = el.querySelector<HTMLElement>('.opts')!;
+    opts.innerHTML = '';
+    labels.forEach((label, i) => {
+      const row = document.createElement('div');
+      row.className = 'opt';
+      const key = document.createElement('b');
+      key.textContent = `[${i + 1}]`;
+      row.append(key, document.createTextNode(label));
+      opts.appendChild(row);
+    });
+    el.classList.add('show');
+  }
+
+  hideChoice(): void {
+    this.root.querySelector('.choice')!.classList.remove('show');
   }
 
   showDocument(title: string, body: string): void {

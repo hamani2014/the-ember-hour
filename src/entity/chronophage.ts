@@ -7,35 +7,36 @@ export type EntityPhase = 1 | 2 | 3 | 4;
 export type EntityMode = 'dormant' | 'lurk' | 'hunt' | 'lunge' | 'caught';
 
 interface PhaseConfig {
-  /** m/s it creeps inward while the player stands still. */
-  creep: number;
-  /** m/s it closes in when hunting a noise or when the torch is out. */
+  /** m/s it closes in during a scripted chase. */
   hunt: number;
   /** Metres at which a sprint (noise 1) is heard; walking is heard at a quarter of this. */
   hearing: number;
-  /** Resting distance it lurks at. */
+  /** Distance it lurks at between attacks. */
   lurk: number;
   /** Visual size multiplier. */
   scale: number;
-  /** Rage gained per second while held in torchlight. */
+  /** Rage gained per second while held in torchlight (scripted chase only). */
   rage: number;
+  /** Seconds between attacks [min, max]. */
+  attackEvery: [number, number];
+  /** Seconds a charge takes to reach you — your window to look away. */
+  attackTime: number;
 }
 
-/** Each act the entity grows bolder, faster and bigger. */
+/** Each act the entity grows bolder, faster and bigger. Act IV attacks every 4–6 s. */
 const PHASES: Record<EntityPhase, PhaseConfig> = {
-  1: { creep: 0.35, hunt: 2.6, hearing: 10, lurk: 9, scale: 1.0, rage: 0.3 },
-  2: { creep: 0.5, hunt: 3.4, hearing: 14, lurk: 8, scale: 1.25, rage: 0.4 },
-  3: { creep: 0.65, hunt: 4.2, hearing: 18, lurk: 7, scale: 1.6, rage: 0.5 },
-  4: { creep: 0.8, hunt: 5.0, hearing: 22, lurk: 6, scale: 2.0, rage: 0.65 },
+  1: { hunt: 2.6, hearing: 10, lurk: 9, scale: 1.0, rage: 0.3, attackEvery: [16, 24], attackTime: 3.5 },
+  2: { hunt: 3.4, hearing: 14, lurk: 8, scale: 1.25, rage: 0.4, attackEvery: [12, 16], attackTime: 3.2 },
+  3: { hunt: 4.2, hearing: 18, lurk: 7, scale: 1.6, rage: 0.5, attackEvery: [8, 12], attackTime: 3.0 },
+  4: { hunt: 5.0, hearing: 22, lurk: 6, scale: 2.0, rage: 0.65, attackEvery: [4, 6], attackTime: 3.0 },
 };
 
 const CATCH_DISTANCE = 1.1;
 const MIN_DISTANCE = 0.7;
-const SMOTHER_DRAIN = 18; // fuel/s while it's wrapped around the flame
+const SMOTHER_DRAIN = 18; // fuel/s while it's wrapped around the flame (scripted chase)
 const RETREAT_SPEED = 3.5;
 const PUSH_RATE = 3;
 const TORCH_CONE = Math.cos(THREE.MathUtils.degToRad(28));
-const HUNT_MEMORY = 2.5; // seconds it keeps hunting after the last noise
 const LUNGE_TIME = 1.4;
 const GUST_COST = 10; // fuel ripped away by its shriek
 const DRIFT_SPEED = 0.35; // rad/s it circles to stay behind the player
@@ -46,11 +47,12 @@ const CHASE_SPEED = 0.97; // × hunt speed while chasing at mid range (a sprint 
 const CHASE_BAND: [number, number] = [3.5, 6]; // metres: closer → it eases off, further → it surges
 const CHASE_LEASH = 12; // metres — it never falls further behind than this
 const GLIMPSE_COOLDOWN = 9; // seconds between 'caught sight of it' scares
-const ENGAGE_DISTANCE = 4; // this close, it steps out of the shadows and becomes physically present
-const RELEASE_DISTANCE = 4.5; // walk this far from it without looking, and it slinks back into the dark
-const PRESENCE_SPEED = 1.8; // m/s it closes in while you look at it (time to react and look away)
-const SULK_TIME = 14; // seconds it keeps its distance after slinking back
-const WATCH_CONE = 0.8; // how directly you must face it to be "looking at it" (cos of ~37°)
+const ATTACK_DISTANCE: [number, number] = [5.5, 7.5]; // how far away it appears when it charges
+const ATTACK_ANGLE: [number, number] = [0.12, 0.5]; // radians off your line of sight it appears at
+const LOOK_AWAY_CONE = 0.55; // facing it less directly than this (cos ~57°) counts as looking away
+const HIT_COST = 35; // fuel its blow tears from the torch
+const STALL_HOLD = 1.1; // seconds it stands frozen after you look away
+const BACK_OFF_SPEED = 2.5; // m/s it backs away before melting into the dark
 const TAU = Math.PI * 2;
 
 interface Puff {
@@ -65,13 +67,13 @@ interface Puff {
 }
 
 /**
- * The Chronophage: a mass of soot and shadow that stalks the player.
- * - In the shadows it orbits out of sight. Standing still: it creeps inward. Walking: it drifts back.
- *   Noise (sprinting) is heard → it hunts, closing in fast. Meeting its gaze draws it toward you.
- * - Within ENGAGE_DISTANCE it steps out and becomes present: it moves ONLY while you look at it.
- *   Look away and it freezes where it stands (whispering); walk RELEASE_DISTANCE away from it without
- *   looking and it slinks back into the dark for a while. With the torch out, nothing stops it.
- * - If it reaches you while you're looking, it smothers the flame; when the flame dies, it takes you.
+ * The Chronophage: a mass of soot and shadow that hunts the player.
+ * - Between attacks it lurks out of sight, circling behind; it hurls junk (phase 2+) and blows drafts (phase 3+).
+ * - Every few seconds (per phase; 4–6 s in Act IV) it appears in your field of view and charges. You have about
+ *   3 seconds to look away. Do, and it stops dead, backs off and melts into the dark — then comes again from
+ *   another angle. Don't, and it strikes: a big chunk of your flame is torn away; if the flame dies, it takes you.
+ * - Sprinting is heard and brings the next attack sooner. With the torch out, looking away won't save you.
+ * - It is never the same shape twice: each sighting shows the next of its three forms.
  * - Scripted chases (Act III) use a separate world-space pursuit where torchlight drives it back.
  */
 export class Chronophage {
@@ -86,14 +88,15 @@ export class Chronophage {
   smothering = false;
   /** True while the player is looking at it. */
   watched = false;
-  /** True while it's present but frozen because the player has looked away. */
+  /** True while it stands frozen because you looked away mid-charge. */
   held = false;
-  /** World position once it has stepped out of the shadows; null while it stalks unseen. */
-  private presencePos: THREE.Vector3 | null = null;
-  private sulkTimer = 0;
-  private desired = 9;
+  /** The attack in progress, if any. */
+  private attack: { pos: THREE.Vector3; stage: 'charge' | 'stalled' | 'retreat'; timer: number; speed: number; unstoppable: boolean } | null = null;
+  private attackTimer = 0;
+  /** 0..1 — fades it out as it melts back into the dark after an attack. */
+  private fade = 1;
+  private lastSide = 1;
   private angle = 0;
-  private huntTimer = 0;
   private lungeTimer = 0;
   private throwTimer = THROW_INTERVAL[0];
   private draftTimer = DRAFT_INTERVAL[0];
@@ -262,12 +265,13 @@ export class Chronophage {
     this.body.scale.setScalar(this.config.scale);
     this.extraEyes.visible = phase >= 4;
     this.reset(distance);
+    this.attackTimer = this.config.attackEvery[0] * 0.75; // the first attack comes quickly
     this.game.events.emit('wake');
   }
 
   deactivate(): void {
     this.mode = 'dormant';
-    this.presencePos = null;
+    this.attack = null;
     this.held = false;
     this.frozen = false;
     this.smoke.color.set(0x000000);
@@ -277,33 +281,34 @@ export class Chronophage {
     this.group.visible = false;
   }
 
-  /** Put it back in the dark behind the player, calm. */
+  /** Put it back in the dark behind the player, calm, with a full breather before the next attack. */
   reset(distance = this.config.lurk): void {
-    this.distance = this.desired = distance;
+    this.distance = distance;
     this.angle = this.behindAngle();
     this.rage = 0;
-    this.huntTimer = 0;
     this.lungeTimer = 0;
     this.throwTimer = THROW_INTERVAL[0];
     this.draftTimer = DRAFT_INTERVAL[0];
     this.chasePos = null;
-    this.presencePos = null;
+    this.attack = null;
     this.held = false;
-    this.sulkTimer = 8; // a breath of space after waking or respawning
+    this.fade = 1;
+    this.attackTimer = this.config.attackEvery[1];
     this.smothering = false;
     if (this.mode !== 'dormant') this.mode = 'lurk';
   }
 
-  /** Something loud happened — it comes looking. */
+  /** Something loud happened — it comes for you soon. */
   alert(): void {
-    if (this.mode === 'lurk' || this.mode === 'hunt') this.huntTimer = HUNT_MEMORY * 1.6;
+    if (!this.attack && this.mode !== 'dormant') this.attackTimer = Math.min(this.attackTimer, 1);
   }
 
   /** Ending B: the dawn turns it to a towering obsidian statue at `at`, facing `lookAt`. Eyes stay lit. */
   petrify(at: THREE.Vector3, lookAt: THREE.Vector3): void {
     this.frozen = true;
     this.chasePos = null;
-    this.presencePos = null;
+    this.attack = null;
+    this.fade = 1;
     this.smothering = false;
     this.mode = 'caught';
     this.group.visible = true;
@@ -354,84 +359,61 @@ export class Chronophage {
   private think(dt: number): void {
     const { player, torch } = this.game;
     const cfg = this.config;
-
-    // Hearing: it's blind, but noise carries.
-    if (player.noise > 0 && this.distance < cfg.hearing * player.noise) this.huntTimer = HUNT_MEMORY;
-    this.huntTimer = Math.max(0, this.huntTimer - dt);
-    this.sulkTimer = Math.max(0, this.sulkTimer - dt);
+    const heard = player.noise > 0 && this.distance < cfg.hearing * player.noise;
 
     // Is the torch pointed at it? Is the player looking at it at all?
     this.tmp.copy(this.group.position).sub(player.feet).setY(0).normalize();
     player.forward(this.facing);
     const facingIt = this.facing.dot(this.tmp);
     this.exposed = torch.lit && facingIt > TORCH_CONE && this.distance < torch.light.distance * 0.85;
-    this.watched = facingIt > WATCH_CONE && this.distance < 12;
+    this.watched = facingIt > LOOK_AWAY_CONE && this.distance < 14;
 
-    if (this.chasePos) this.chase(dt);
-    else if (this.presencePos) this.present(dt);
-    else {
-      this.stalk(dt);
-      if (this.sulkTimer <= 0 && this.distance < ENGAGE_DISTANCE) this.emerge();
-    }
-
-    // Close enough to smother the flame — but only while you keep looking at it (or the light is gone).
-    const canTouch = this.chasePos ? !this.exposed : this.watched || !torch.lit;
-    this.smothering = this.distance < CATCH_DISTANCE && canTouch;
-    if (this.smothering) {
-      torch.spend(SMOTHER_DRAIN * dt);
-      player.shake = Math.max(player.shake, 0.025);
-      if (!torch.lit) {
-        this.mode = 'caught';
-        this.chasePos = null;
-        this.game.caught();
+    if (this.chasePos) {
+      this.chase(dt);
+      // In a chase it smothers the flame when it catches you, unless you hold the light on it.
+      this.smothering = this.distance < CATCH_DISTANCE && !this.exposed;
+      if (this.smothering) {
+        torch.spend(SMOTHER_DRAIN * dt);
+        player.shake = Math.max(player.shake, 0.025);
+        if (!torch.lit) {
+          this.mode = 'caught';
+          this.chasePos = null;
+          this.game.caught();
+        }
       }
+      return;
     }
+    this.smothering = false;
+    if (this.attack) this.updateAttack(dt);
+    else this.lurk(dt, heard);
   }
 
-  /** Default behaviour: orbit at a distance that shrinks or grows with what the player does. */
-  private stalk(dt: number): void {
-    const { player, torch } = this.game;
+  /** Between attacks: hang back in the dark, out of sight, counting down. */
+  private lurk(dt: number, heard: boolean): void {
+    const { torch } = this.game;
     const cfg = this.config;
+    this.mode = 'lurk';
+    this.held = false;
+    this.fade = Math.min(1, this.fade + dt);
+    this.distance += THREE.MathUtils.clamp(cfg.lurk - this.distance, -2 * dt, RETREAT_SPEED * dt);
+    if (!this.watched) this.angle = rotateToward(this.angle, this.behindAngle(), DRIFT_SPEED * dt);
 
-    let approach = cfg.creep * 2;
-    if (this.mode === 'lunge') {
-      this.lungeTimer -= dt;
-      this.desired = 0;
-      approach = cfg.hunt * 1.7;
-      if (this.lungeTimer <= 0) this.mode = 'lurk';
-    } else if (this.watched && torch.lit) {
-      // Meeting its gaze draws it out of the dark toward you.
-      this.desired -= cfg.hunt * 0.6 * dt;
-      approach = cfg.hunt * 0.6;
-      this.mode = 'hunt';
-    } else {
-      this.rage = Math.max(0, this.rage - 0.12 * dt);
-      if (!torch.lit || this.huntTimer > 0) {
-        this.desired -= cfg.hunt * dt;
-        approach = cfg.hunt;
-      } else if (player.state === 'still') {
-        this.desired -= cfg.creep * dt;
-      } else {
-        this.desired += 0.15 * dt;
-      }
-      this.mode = this.huntTimer > 0 ? 'hunt' : 'lurk';
+    // Noise brings it sooner. In the dark, it comes now.
+    this.attackTimer -= dt * (heard ? 2.5 : 1);
+    if (!torch.lit) this.attackTimer = Math.min(this.attackTimer, 0.5);
+    if (this.attackTimer <= 0) {
+      this.beginAttack(!torch.lit);
+      return;
     }
-    this.desired = THREE.MathUtils.clamp(this.desired, 0, cfg.lurk + 2);
-    if (this.sulkTimer > 0) this.desired = Math.max(this.desired, Math.min(cfg.lurk + 2, 7)); // still slinking off
-    this.distance += THREE.MathUtils.clamp(this.desired - this.distance, -approach * dt, RETREAT_SPEED * dt);
-    this.distance = Math.max(this.distance, MIN_DISTANCE);
 
-    // From phase 2 it hurls loose metal out of the dark to rattle you.
-    if (this.phase >= 2 && this.mode !== 'lunge') {
+    if (this.phase >= 2) {
       this.throwTimer -= dt;
       if (this.throwTimer <= 0) {
         this.throwJunk();
         this.throwTimer = THREE.MathUtils.randFloat(...THROW_INTERVAL);
       }
     }
-
-    // From phase 3 it blows cold drafts that knock the flame down.
-    if (this.phase >= 3 && this.distance < 9 && this.mode !== 'lunge') {
+    if (this.phase >= 3 && this.distance < 9) {
       this.draftTimer -= dt;
       if (this.draftTimer <= 0) {
         torch.spend(DRAFT_COST);
@@ -440,57 +422,106 @@ export class Chronophage {
         this.draftTimer = THREE.MathUtils.randFloat(...DRAFT_INTERVAL);
       }
     }
-
-    // Unseen, it circles round to stay behind you.
-    if (!this.watched && this.mode !== 'lunge') this.angle = rotateToward(this.angle, this.behindAngle(), DRIFT_SPEED * dt);
   }
 
-  /** Step out of the shadows: from now on it has a real position, and it only moves while watched. */
-  private emerge(): void {
-    const feet = this.game.player.feet;
-    this.presencePos = new THREE.Vector3(feet.x + Math.cos(this.angle) * this.distance, 0, feet.z + Math.sin(this.angle) * this.distance);
-    this.mode = 'lurk';
-    this.lungeTimer = 0;
-    this.rage = 0;
-  }
-
-  /**
-   * Present: look at it and it comes for you; look away and it stops dead where it stands — you can walk
-   * around it, its whispers in your ears. Get far enough from it without looking, and it slinks back into
-   * the dark. With the torch out, nothing stops it.
-   */
-  private present(dt: number): void {
-    const { player, torch } = this.game;
-    const pos = this.presencePos!;
-    const moving = this.watched || !torch.lit;
-    this.held = !moving;
-    if (moving) {
-      const dx = player.feet.x - pos.x;
-      const dz = player.feet.z - pos.z;
-      const d = Math.max(Math.hypot(dx, dz), 1e-4);
-      const step = Math.min(PRESENCE_SPEED * (torch.lit ? 1 : 1.5) * dt, d - MIN_DISTANCE);
-      pos.x += (dx / d) * step;
-      pos.z += (dz / d) * step;
-      this.mode = 'hunt';
-    } else {
-      this.mode = 'lurk';
-    }
-    this.distance = Math.max(MIN_DISTANCE, Math.hypot(player.feet.x - pos.x, player.feet.z - pos.z));
-    this.angle = Math.atan2(pos.z - player.feet.z, pos.x - player.feet.x);
-    if (this.held && this.distance > RELEASE_DISTANCE) this.slinkBack();
-  }
-
-  private slinkBack(): void {
-    this.presencePos = null;
+  /** It appears in your field of view — off to one side, a different side each time — and charges. */
+  private beginAttack(unstoppable: boolean): void {
+    const { player } = this.game;
+    const yaw = player.yaw;
+    const lookAngle = Math.atan2(-Math.cos(yaw), -Math.sin(yaw)); // XZ angle of where you're looking
+    this.lastSide = Math.random() < 0.7 ? -this.lastSide : this.lastSide;
+    const a = lookAngle + this.lastSide * THREE.MathUtils.randFloat(...ATTACK_ANGLE);
+    const d = THREE.MathUtils.randFloat(...ATTACK_DISTANCE);
+    const pos = new THREE.Vector3(player.feet.x + Math.cos(a) * d, 0, player.feet.z + Math.sin(a) * d);
+    this.attack = { pos, stage: 'charge', timer: 0, speed: (d - CATCH_DISTANCE) / this.config.attackTime, unstoppable };
+    this.mode = 'hunt';
     this.held = false;
-    this.sulkTimer = SULK_TIME;
-    this.desired = this.distance;
-    this.game.events.emit('retreat');
+    this.fade = 1;
+    // Make sure the sight of it lands as a scare, every time.
+    this.glimpseCooldown = 0;
+    this.wasInView = false;
   }
 
-  /** It has stepped out of the dark and is physically somewhere. */
-  get isPresent(): boolean {
-    return this.presencePos !== null;
+  private updateAttack(dt: number): void {
+    const { player } = this.game;
+    const at = this.attack!;
+    at.timer += dt;
+    const toPlayer = () => {
+      const dx = player.feet.x - at.pos.x;
+      const dz = player.feet.z - at.pos.z;
+      return { dx, dz, d: Math.max(Math.hypot(dx, dz), 1e-4) };
+    };
+
+    if (at.stage === 'charge') {
+      this.mode = 'hunt';
+      if (!at.unstoppable && !this.watched && at.timer > 0.15) {
+        // You looked away: it stops dead.
+        at.stage = 'stalled';
+        at.timer = 0;
+        this.held = true;
+        this.mode = 'lurk';
+      } else {
+        const { dx, dz, d } = toPlayer();
+        const step = Math.min(at.speed * (1 + at.timer * 0.2) * dt, d - MIN_DISTANCE);
+        at.pos.x += (dx / d) * step;
+        at.pos.z += (dz / d) * step;
+        if (d - step <= CATCH_DISTANCE) this.strike();
+      }
+    } else if (at.stage === 'stalled') {
+      this.held = true;
+      if (at.timer >= STALL_HOLD) {
+        at.stage = 'retreat';
+        at.timer = 0;
+        this.held = false;
+        this.game.events.emit('retreat');
+      }
+    } else {
+      // Back off a little, melting into the dark, then circle round for the next attack.
+      const { dx, dz, d } = toPlayer();
+      at.pos.x -= (dx / d) * BACK_OFF_SPEED * dt;
+      at.pos.z -= (dz / d) * BACK_OFF_SPEED * dt;
+      this.fade = Math.max(0, 1 - at.timer);
+      if (at.timer >= 1) {
+        this.endAttack();
+        return;
+      }
+    }
+    if (!this.attack) return;
+    this.distance = Math.max(MIN_DISTANCE, Math.hypot(player.feet.x - at.pos.x, player.feet.z - at.pos.z));
+    this.angle = Math.atan2(at.pos.z - player.feet.z, at.pos.x - player.feet.x);
+  }
+
+  /** Too slow: it tears into the flame. */
+  private strike(): void {
+    const { torch, player, events, embers } = this.game;
+    torch.spend(HIT_COST);
+    torch.gutter = 1;
+    player.shake = 0.12;
+    events.emit('lunge');
+    embers.emit(this.group.position.clone().setY(1.4), 40, 0.6, 2);
+    if (!torch.lit) {
+      this.attack = null;
+      this.mode = 'caught';
+      this.game.caught();
+      return;
+    }
+    this.attack!.stage = 'retreat';
+    this.attack!.timer = 0;
+  }
+
+  private endAttack(): void {
+    this.attack = null;
+    this.held = false;
+    this.mode = 'lurk';
+    this.fade = 0;
+    this.distance = this.config.lurk;
+    this.angle = this.behindAngle();
+    this.attackTimer = THREE.MathUtils.randFloat(...this.config.attackEvery);
+  }
+
+  /** True while it is charging, frozen, or backing off. */
+  get attacking(): boolean {
+    return this.attack !== null;
   }
 
   /**
@@ -545,7 +576,7 @@ export class Chronophage {
   /** Start a world-space pursuit from `distance` metres behind the player. */
   startChase(distance = 9): void {
     if (this.mode === 'dormant') return;
-    this.presencePos = null;
+    this.attack = null;
     this.held = false;
     const a = this.behindAngle();
     const feet = this.game.player.feet;
@@ -557,7 +588,6 @@ export class Chronophage {
   stopChase(): void {
     this.chasePos = null;
     if (this.mode === 'hunt') this.mode = 'lurk';
-    this.desired = this.distance;
   }
 
   private lunge(): void {
@@ -616,10 +646,12 @@ export class Chronophage {
     const blink = Math.sin(t * 0.9) > 0.97 ? 0 : 1;
     const flicker = 0.85 + Math.sin(t * 17) * 0.1 + (Math.random() - 0.5) * 0.1;
     // Always a faint ember rim so its shape reads in the dark; much brighter when the light is on it.
-    this.haloMaterial.opacity = Math.min(1, (0.36 + 0.35 * this.reveal + 0.45 * this.flash) * flicker);
-    this.faceMaterial.opacity = Math.min(0.9, (0.14 + 0.5 * this.reveal + 0.6 * this.flash) * flicker);
-    this.clockMaterial.opacity = Math.min(0.95, (0.22 + 0.5 * this.reveal + 0.6 * this.flash) * flicker);
-    this.eyeMaterial.opacity = Math.min(1, Math.max(0.35 + THREE.MathUtils.clamp((8 - this.distance) / 4, 0, 1) * 0.6, this.flash) * blink);
+    const f = this.fade;
+    this.smoke.opacity = 0.92 * f;
+    this.haloMaterial.opacity = Math.min(1, (0.36 + 0.35 * this.reveal + 0.45 * this.flash) * flicker) * f;
+    this.faceMaterial.opacity = Math.min(0.9, (0.14 + 0.5 * this.reveal + 0.6 * this.flash) * flicker) * f;
+    this.clockMaterial.opacity = Math.min(0.95, (0.22 + 0.5 * this.reveal + 0.6 * this.flash) * flicker) * f;
+    this.eyeMaterial.opacity = Math.min(1, Math.max(0.35 + THREE.MathUtils.clamp((8 - this.distance) / 4, 0, 1) * 0.6, this.flash) * blink) * f;
     // Shedding embers and ash as it moves.
     if (Math.random() < dt * (4 + 6 * this.reveal)) {
       const s = this.config.scale;

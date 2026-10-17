@@ -84,7 +84,7 @@ export function createSteamVent(game: Game, o: SteamVentOptions): void {
       feet.z += dz * push;
       if (!game.flags.has('steam-hint')) {
         game.flags.add('steam-hint');
-        game.hud.say('Scalding steam — it’s drowning the flame. Time it.');
+        game.hud.say('Scalding—');
       }
     }
   });

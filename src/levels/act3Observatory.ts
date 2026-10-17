@@ -208,7 +208,7 @@ export function buildAct3Observatory(game: Game): void {
     flameSize: 1.7,
     onLit: () => {
       beamOn = true;
-      game.hud.say('The lens caught the flame. Now — the mirrors.');
+      game.hud.say('The lens caught the flame.');
     },
     onBurn: () => {
       haltOrrery();
@@ -304,7 +304,6 @@ export function buildAct3Observatory(game: Game): void {
       onTake: () => {
         coreLight.intensity = 0;
         RECORDING.forEach((line, i) => game.tweens.delay(1.5 + i * 5, () => game.hud.say(line, 4.8)));
-        game.tweens.delay(17, () => game.hud.say('Burn it… in the beacon.', 3.5));
       },
     });
   };
@@ -562,7 +561,6 @@ export function buildAct3Observatory(game: Game): void {
   game.hud.fade(0, 2.5);
   game.hud.title('ACT III', 'THE CHRONOS OBSERVATORY · THE FUTURE');
   game.tweens.delay(4.5, () => game.hud.say('The future… what’s left of it. The sky is bleeding.', 4));
-  game.tweens.delay(11, () => game.hud.say('A beacon and mirrors. If I light it, they could carry the flame to that crystal.', 5));
   game.tweens.delay(18, () => {
     if (game.entity.mode !== 'dormant') return;
     game.entity.activate(3);

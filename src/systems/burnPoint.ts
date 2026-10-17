@@ -20,6 +20,10 @@ export interface BurnPointOptions {
   onLit?: () => void;
   /** Prompt shown when lit but no acceptable clue is held (return null for none). */
   idlePrompt?: () => string | null;
+  /** If set, the player picks which accepted item to burn from a menu instead of it being chosen for them. */
+  choose?: { prompt: string; title: string };
+  /** Called the moment an item starts burning. */
+  onBurnStart?: (clue: Clue) => void;
   onBurn: (clue: Clue) => void;
 }
 
@@ -51,6 +55,7 @@ export function createBurnPoint(game: Game, o: BurnPointOptions): void {
       if (busy) return null;
       if (!lit) return game.torch.lit ? `Light the ${o.name}` : null;
       const clue = game.inventory.find(o.accepts);
+      if (clue && o.choose) return o.choose.prompt;
       return clue ? `Burn ${clue.name}` : (o.idlePrompt?.() ?? null);
     },
     interact: () => {
@@ -64,6 +69,15 @@ export function createBurnPoint(game: Game, o: BurnPointOptions): void {
         o.onLit?.();
         return;
       }
+      if (o.choose) {
+        const held = game.inventory.clues.filter((c) => o.accepts.includes(c.id));
+        if (!held.length) return;
+        game.choose(o.choose.title, held.map((c) => ({ id: c.id, label: c.name })), (id) => {
+          const picked = held.find((c) => c.id === id);
+          if (picked) burn(picked);
+        });
+        return;
+      }
       const clue = game.inventory.find(o.accepts);
       if (clue) burn(clue);
     },
@@ -72,6 +86,7 @@ export function createBurnPoint(game: Game, o: BurnPointOptions): void {
   function burn(clue: Clue): void {
     busy = true;
     game.inventory.remove(clue.id);
+    o.onBurnStart?.(clue);
 
     // Hold the clue over the flame, then let it curl to ash.
     const item = clue.object;

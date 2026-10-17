@@ -40,6 +40,8 @@ export class Game {
   /** Where the player wakes up after the shadow takes them. Levels move this forward. */
   checkpoint = { x: 0, z: 0, yaw: 0 };
   level: LevelId | null = null;
+  /** A choice menu is open (e.g. the ritual offering): the world is paused until the player picks. */
+  private choosing: { ids: string[]; onPick: (id: string | null) => void } | null = null;
   /** A document is open: the world is paused until it's closed. */
   reading = false;
   private onDocumentClosed?: () => void;
@@ -66,7 +68,7 @@ export class Game {
     this.player = new PlayerController(this.camera, this.input, this.collision);
     this.torch = new Torch(this.camera);
     this.torch.onExtinguish = () => {
-      this.hud.say('The flame is out… I need something to burn.');
+      this.hud.say('The flame is out…');
       this.events.emit('extinguish');
     };
     this.interaction = new Interaction(this.world, this.camera, this.input, this.hud);
@@ -97,8 +99,25 @@ export class Game {
     this.hud.setFuelVisible(true);
     this.hud.setCinematic(false);
     if (this.reading) this.closeDocument();
+    if (this.choosing) {
+      this.choosing = null;
+      this.hud.hideChoice();
+    }
     this.level = id;
     LEVELS[id](this);
+  }
+
+  /** Show a numbered menu; the world pauses until the player picks (1–9) or steps back (Q). */
+  choose(title: string, options: { id: string; label: string }[], onPick: (id: string | null) => void): void {
+    this.choosing = { ids: options.map((o) => o.id), onPick };
+    this.hud.showChoice(title, options.map((o) => o.label));
+  }
+
+  private finishChoice(id: string | null): void {
+    const c = this.choosing;
+    this.choosing = null;
+    this.hud.hideChoice();
+    c?.onPick(id);
   }
 
   /** Open a note/letter/clipping on screen. The world pauses until the player closes it with E. */
@@ -125,10 +144,10 @@ export class Game {
     if (!this.torch.lit) return;
     if (r < 0.3 && !this.fuelWarnings.has(1)) {
       this.fuelWarnings.add(1);
-      this.hud.say('My flame is dying. I need something to burn — or a hearth to rekindle it.', 4.5);
+      this.hud.say('The flame is getting weak…', 4.5);
     } else if (r < 0.12 && !this.fuelWarnings.has(2)) {
       this.fuelWarnings.add(2);
-      this.hud.say('It’s almost out. Find a fire. Now.', 3.5);
+      this.hud.say('It’s almost out.', 3.5);
     }
   }
 
@@ -169,7 +188,13 @@ export class Game {
       // The E that closes a document must not also trigger whatever is in front of the player.
       const closing = this.reading && (this.input.wasPressed('KeyE') || this.input.wasPressed('Space') || this.input.wasPressed('Enter'));
       if (closing) this.closeDocument();
-      if (playing && !this.reading) {
+      const choosing = this.choosing !== null;
+      if (this.choosing) {
+        const n = this.choosing.ids.findIndex((_, i) => this.input.wasPressed(`Digit${i + 1}`) || this.input.wasPressed(`Numpad${i + 1}`));
+        if (n >= 0) this.finishChoice(this.choosing.ids[n]);
+        else if (this.input.wasPressed('KeyQ') || this.input.wasPressed('Backspace')) this.finishChoice(null);
+      }
+      if (playing && !this.reading && !choosing) {
         this.audio.update(dt);
         if (!this.controlsLocked) {
           this.player.update(dt);
@@ -180,7 +205,7 @@ export class Game {
         this.tweens.update(dt);
       }
       this.hud.setThreat(this.entity.threat);
-      if (!this.controlsLocked && !this.reading && !closing) this.interaction.update();
+      if (!this.controlsLocked && !this.reading && !closing && !choosing) this.interaction.update();
       else this.hud.setPrompt(null);
       this.embers.update(dt, t);
       this.hud.setFuel(this.torch.ratio);

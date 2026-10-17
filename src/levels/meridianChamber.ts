@@ -93,7 +93,7 @@ export function buildMeridianChamber(game: Game): void {
   pedestal.userData.noHit = true;
   drive.position.set(2.5, 0.95, -27.4);
   game.world.add(drive);
-  createClue(game, { id: 'expedition-drive', name: 'Expedition Drive', object: drive, doc: 'expeditionDrive', thought: '"By car, at night, in the rain." …No. That’s not— Burn it. Get across.' });
+  createClue(game, { id: 'expedition-drive', name: 'Expedition Drive', object: drive, doc: 'expeditionDrive', thought: '"By car, at night, in the rain." …No. That\u2019s not—' });
 
   // Brazier on the far landing; the energy bridge beyond it.
   const brazier = new THREE.Group();

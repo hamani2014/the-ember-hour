@@ -153,7 +153,7 @@ export function buildAct2Boiler(game: Game): void {
   logbook.add(logCover, hitArea(0.3));
   logbook.position.set(-6.6, 0.93, -7.3);
   game.world.add(logbook);
-  createClue(game, { id: 'foreman-log', name: "Foreman's Logbook", object: logbook, doc: 'foremanLog', thought: 'Eleven warnings. Nobody listened. Burn it in the furnace — let it be heard.' });
+  createClue(game, { id: 'foreman-log', name: "Foreman's Logbook", object: logbook, doc: 'foremanLog', thought: 'Eleven warnings. Nobody listened.' });
   createNote(game, { doc: 'workerNote', pos: [-4.62, 1.5, -5.4], rot: [0, -Math.PI / 2, 0], size: [0.22, 0.28] });
   createNote(game, { doc: 'shiftBoard', pos: [-2.5, 1.7, 7.98], rot: [0, Math.PI, 0], size: [0.5, 0.4] });
 
@@ -287,13 +287,13 @@ export function buildAct2Boiler(game: Game): void {
             game.events.emit('clank', BV(0, 2.5, -3.5));
             game.player.shake = 0.05;
             game.entity.alert();
-            game.hud.say('Wrong order — the pressure blew them all out. And that noise… it heard.');
+            game.hud.say('The pressure blew them all out. And that noise… it heard.');
             sequence = [];
             busy = false;
           });
         } else if (sequence.length === PILOT_ORDER.length) {
           solved = true;
-          game.hud.say('The pressure’s dropping… something unlatched by the boiler.');
+          game.hud.say('The pressure’s dropping…');
           game.tweens.delay(0.8, () => {
             const at = BV(4.6, 1.1, -5.2);
             game.events.emit('steam', at);
@@ -406,7 +406,6 @@ export function buildAct2Boiler(game: Game): void {
   game.hud.fade(0, 2.5);
   game.hud.title('ACT II', 'THE IRONWORKS · FIFTY YEARS AGO');
   game.tweens.delay(4.5, () => game.hud.say('Fifty years back… the ironworks. Still burning.', 4));
-  game.tweens.delay(10, () => game.hud.say('The foreman’s office, in the corner. If anyone knew what happened here, he did.', 5));
   game.tweens.delay(16, () => {
     if (game.entity.mode !== 'dormant') return;
     game.entity.activate(2);

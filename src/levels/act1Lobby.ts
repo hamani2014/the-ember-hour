@@ -103,7 +103,7 @@ export function buildAct1Lobby(game: Game): void {
     onTake: () =>
       game.tweens.delay(5, () => {
         game.entity.activate(1);
-        game.hud.say('Something moved behind me. Keep the light on it.');
+        game.hud.say('Something moved behind me.');
       }),
   });
 
@@ -288,7 +288,7 @@ export function buildAct1Lobby(game: Game): void {
     const p = game.player.feet;
     if (!warnedDoor && !boards.open && p.z < -3.6 && Math.abs(p.x) < 1.6) {
       warnedDoor = true;
-      game.hud.say('Boarded shut. The wood’s soaked through, it won’t catch from the torch.');
+      game.hud.say('Boarded shut.');
     }
   });
 }

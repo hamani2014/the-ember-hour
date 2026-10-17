@@ -11,6 +11,11 @@ const RADIO = [
   'RADIO: “…residents are urged to remain indoors. Do not travel the valley roads after dark…”',
   'RADIO: “…repeat, remain indo—”',
 ];
+/** After Ending A: the same night again — and Julian remembers. */
+const RADIO_LOOP = [
+  'RADIO: “…weather advisory for the county tonight. An unseasonal drop in temper— temper— temperature…”',
+  'RADIO: “…remain indoors. Remain indoors. Remain indoors. Remain indo—”',
+];
 const SEAT = { x: -0.38, z: 0.45 };
 const RAIN_DROPS = 1400;
 
@@ -288,7 +293,16 @@ export function buildPrologue(game: Game): void {
   hud.fade(1, 0);
   tweens.delay(0.1, () => hud.fade(0, 3));
 
-  RADIO.forEach((line, i) => tweens.delay(2 + i * 4.5, () => hud.say(line, i === 2 ? 2.2 : 4.3)));
+  const looped = game.flags.has('looped');
+  if (!looped) {
+    RADIO.forEach((line, i) => tweens.delay(2 + i * 4.5, () => hud.say(line, i === 2 ? 2.2 : 4.3)));
+  } else {
+    // Ending A, the loop: the same car, the same rain, the same night — and he knows it.
+    tweens.delay(1.8, () => hud.say('…What? No. No, I was outside. It was morning. I heard birds.', 4));
+    tweens.delay(6.2, () => hud.say(RADIO_LOOP[0], 3.6));
+    tweens.delay(10.2, () => hud.say(RADIO_LOOP[1], 2.6));
+    tweens.delay(12.2, () => hud.title('ENDING A', 'THE LOOP', 7));
+  }
 
   // The engine coughs twice and dies; the lights go with it.
   const cough = (at: number, rate: number) =>
@@ -316,8 +330,13 @@ export function buildPrologue(game: Game): void {
     );
     tweens.delay(1.5, () => staticLoop?.setVolume(0.2));
     tweens.delay(3.5, () => staticLoop?.stop());
-    tweens.delay(1, () => hud.say('No. No, no, no — not here.', 3));
-    tweens.delay(4.5, () => hud.say('Ashen Vale. Population zero. Perfect.', 3.5));
+    if (!looped) {
+      tweens.delay(1, () => hud.say('No. No, no, no — not here.', 3));
+      tweens.delay(4.5, () => hud.say('Ashen Vale. Population zero. Perfect.', 3.5));
+    } else {
+      tweens.delay(1, () => hud.say('The sign. The radio. The engine… I’ve been here before.', 4));
+      tweens.delay(5.5, () => hud.say('How many times have I been here before?', 4));
+    }
   });
 
   game.interaction.register({
@@ -341,7 +360,6 @@ export function buildPrologue(game: Game): void {
       audio.play('clank', { attach: key, volume: 0.35, rate: 3, refDistance: 0.5 });
       keyTries++;
       if (keyTries === 1) hud.say('Click. Nothing. It’s dead.', 2.5);
-      if (keyTries === 3) hud.say('Stop. It’s not starting. Get out and look.', 3);
     },
   });
 
@@ -360,7 +378,7 @@ export function buildPrologue(game: Game): void {
         game.collision.add(new THREE.Box3(new THREE.Vector3(-0.95, 0, -2.25), new THREE.Vector3(0.95, 1.5, 2.25)));
         hud.fade(0, 1.2);
         lightning = 2.2;
-        tweens.delay(1.5, () => hud.say('Freezing… and so quiet. There’s an emergency kit in the trunk, round the back.', 4));
+        tweens.delay(1.5, () => hud.say('Freezing… and so quiet.', 4));
       });
     },
   });
@@ -397,7 +415,7 @@ export function buildPrologue(game: Game): void {
         () => {
           beam.intensity = 0;
           audio.play('clank', { volume: 0.3, rate: 2.6 });
-          hud.say('Dead. Of course it’s dead. There’s something under it…', 3.5);
+          hud.say('Dead. Of course it\u2019s dead.', 3.5);
         },
       );
     },
@@ -431,7 +449,7 @@ export function buildPrologue(game: Game): void {
         game.embers.emit(front, 30, 0.1, 1.2);
         hud.title('THE EMBER HOUR', 'FIRE · SHADOW · TIME', 5);
       });
-      tweens.delay(6, () => hud.say('Fire. At least fire still works. There\u2019s a light up the road — a building.', 4.5));
+      tweens.delay(6, () => hud.say('Fire. At least fire still works.', 4.5));
     },
   });
 
