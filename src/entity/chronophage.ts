@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { Game } from '../core/game';
-import { faceTexture, textures } from '../core/textures';
+import { clockFaceTexture, faceTexture, textures } from '../core/textures';
 import { lambert } from '../core/ps1';
 
 export type EntityPhase = 1 | 2 | 3 | 4;
@@ -46,6 +46,7 @@ const CHASE_SPEED = 0.97; // × hunt speed while chasing at mid range (a sprint 
 const CHASE_BAND: [number, number] = [3.5, 6]; // metres: closer → it eases off, further → it surges
 const CHASE_LEASH = 12; // metres — it never falls further behind than this
 const GLIMPSE_COOLDOWN = 9; // seconds between 'caught sight of it' scares
+const TAU = Math.PI * 2;
 
 interface Puff {
   sprite: THREE.Sprite;
@@ -85,7 +86,13 @@ export class Chronophage {
   /** World position while chasing (scripted escapes); null when orbiting normally. */
   private chasePos: THREE.Vector3 | null = null;
   private body = new THREE.Group();
-  private puffs: Puff[] = [];
+  /** Its shapes: the Wraith, the Thirty-One, the Hour. It changes between sightings. */
+  private forms: { group: THREE.Group; puffs: Puff[] }[] = [];
+  private formIndex = 0;
+  /** How many times the player has caught sight of it (drives which form comes next). */
+  private sightings = 0;
+  private morphPending = false;
+  private clockMaterial: THREE.SpriteMaterial;
   private eyeMaterial: THREE.SpriteMaterial;
   private smoke: THREE.SpriteMaterial;
   private haloMaterial: THREE.SpriteMaterial;
@@ -107,42 +114,15 @@ export class Chronophage {
     const smoke = new THREE.SpriteMaterial({ map: textures.smoke(), color: 0x000000, transparent: true, opacity: 0.92, depthWrite: false });
     this.smoke = smoke;
     this.haloMaterial = new THREE.SpriteMaterial({ map: textures.smoke(), color: 0x6a200c, transparent: true, opacity: 0.3, blending: THREE.AdditiveBlending, depthWrite: false });
-    const addPuff = (angle: number, radius: number, y: number, size: number) => {
-      const sprite = new THREE.Sprite(smoke);
-      const halo = new THREE.Sprite(this.haloMaterial);
-      halo.renderOrder = -1; // drawn first, so the black soot covers its middle and only the rim glows
-      this.body.add(halo, sprite);
-      this.puffs.push({ sprite, halo, angle, radius, y, size, spin: (Math.random() - 0.5) * 2 });
-    };
-    // Torso column, thick in the middle and narrowing to the shoulders.
-    for (let i = 0; i < 34; i++) {
-      const y = 0.1 + Math.random() * 1.8;
-      const width = 0.22 + Math.sin((y / 1.9) * Math.PI) * 0.3;
-      addPuff(Math.random() * Math.PI * 2, width * Math.random(), y, 0.75 + Math.random() * 0.6);
-    }
-    // Head.
-    for (let i = 0; i < 7; i++) addPuff(Math.random() * Math.PI * 2, 0.1 * Math.random(), 2.0 + Math.random() * 0.25, 0.5 + Math.random() * 0.25);
-    // Long reaching arms.
-    for (const side of [-1, 1]) {
-      for (let i = 0; i < 8; i++) addPuff(side > 0 ? 0 : Math.PI, 0.35 + i * 0.12, 1.6 - i * 0.13, 0.5 - i * 0.03);
-    }
-
-    // A pale, half-formed face in the soot, only ever half seen.
     this.faceMaterial = new THREE.SpriteMaterial({ map: faceTexture(), color: 0xb8aca2, transparent: true, opacity: 0, depthWrite: false });
-    const face = new THREE.Sprite(this.faceMaterial);
-    face.scale.set(0.42, 0.56, 1);
-    face.position.set(0, 2.08, 0.3);
-    face.renderOrder = 1;
-    this.body.add(face);
-
+    this.clockMaterial = new THREE.SpriteMaterial({ map: clockFaceTexture(), color: 0xc8beb0, transparent: true, opacity: 0, depthWrite: false });
     this.eyeMaterial = new THREE.SpriteMaterial({ color: 0xffa860, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false });
-    for (const x of [-0.075, 0.075]) {
-      const eye = new THREE.Sprite(this.eyeMaterial);
-      eye.scale.setScalar(0.07);
-      eye.position.set(x, 2.15, 0.33);
-      eye.renderOrder = 2;
-      this.body.add(eye);
-    }
+
+    this.forms = [this.buildWraith(), this.buildThirtyOne(), this.buildHour()];
+    this.forms.forEach((f, i) => {
+      f.group.visible = i === 0;
+      this.body.add(f.group);
+    });
 
     for (let i = 0; i < 9; i++) {
       for (const dx of [-0.06, 0.06]) {
@@ -160,6 +140,95 @@ export class Chronophage {
     this.group.add(this.body);
     this.group.visible = false;
     game.scene.add(this.group);
+  }
+
+  /** A form-in-progress: its group, its soot puffs, and helpers to add puffs and sprites. */
+  private newForm() {
+    const group = new THREE.Group();
+    const puffs: Puff[] = [];
+    const puff = (angle: number, radius: number, y: number, size: number, spin = (Math.random() - 0.5) * 2) => {
+      const sprite = new THREE.Sprite(this.smoke);
+      const halo = new THREE.Sprite(this.haloMaterial);
+      halo.renderOrder = -1; // drawn first, so the black soot covers its middle and only the rim glows
+      group.add(halo, sprite);
+      puffs.push({ sprite, halo, angle, radius, y, size, spin });
+    };
+    const sprite = (material: THREE.SpriteMaterial, pos: [number, number, number], scale: [number, number], order: number) => {
+      const s = new THREE.Sprite(material);
+      s.position.set(...pos);
+      s.scale.set(scale[0], scale[1], 1);
+      s.renderOrder = order;
+      group.add(s);
+    };
+    return { group, puffs, puff, sprite };
+  }
+
+  /** Form 1 — the Wraith: a tall soot figure with long arms and one pale, half-formed face. */
+  private buildWraith() {
+    const f = this.newForm();
+    for (let i = 0; i < 34; i++) {
+      const y = 0.1 + Math.random() * 1.8;
+      const width = 0.22 + Math.sin((y / 1.9) * Math.PI) * 0.3;
+      f.puff(Math.random() * TAU, width * Math.random(), y, 0.75 + Math.random() * 0.6);
+    }
+    for (let i = 0; i < 7; i++) f.puff(Math.random() * TAU, 0.1 * Math.random(), 2.0 + Math.random() * 0.25, 0.5 + Math.random() * 0.25);
+    for (const side of [-1, 1]) {
+      for (let i = 0; i < 8; i++) f.puff(side > 0 ? 0 : Math.PI, 0.35 + i * 0.12, 1.6 - i * 0.13, 0.5 - i * 0.03);
+    }
+    f.sprite(this.faceMaterial, [0, 2.08, 0.3], [0.42, 0.56], 1);
+    for (const x of [-0.075, 0.075]) f.sprite(this.eyeMaterial, [x, 2.15, 0.33], [0.07, 0.07], 2);
+    return f;
+  }
+
+  /** Form 2 — the Thirty-One: low, wide and crawling on splayed soot limbs, many small faces pressed into it. */
+  private buildThirtyOne() {
+    const f = this.newForm();
+    const moundRadius = (y: number) => 0.95 * Math.sqrt(Math.max(0, 1 - (y / 1.25) ** 2));
+    for (let i = 0; i < 44; i++) {
+      const y = 0.1 + Math.random() * 1.1;
+      f.puff(Math.random() * TAU, moundRadius(y) * Math.random(), y, 0.55 + Math.random() * 0.45);
+    }
+    for (let l = 0; l < 6; l++) {
+      const a = (l / 6) * TAU + 0.3;
+      for (let k = 0; k < 7; k++) {
+        const t = k / 6;
+        f.puff(a, 0.6 + t * 1.5, 0.6 + 0.45 * Math.sin(t * Math.PI) - t * 0.55, 0.34 - t * 0.16, 0.04);
+      }
+    }
+    for (let i = 0; i < 9; i++) {
+      const th = (Math.random() - 0.5) * 2.1;
+      const y = 0.35 + Math.random() * 0.7;
+      const rr = moundRadius(y) * 0.75 + 0.08;
+      const pos: [number, number, number] = [Math.sin(th) * rr, y, Math.cos(th) * rr];
+      f.sprite(this.faceMaterial, pos, [0.24, 0.32], 1);
+      for (const dx of [-0.042, 0.042]) f.sprite(this.eyeMaterial, [pos[0] + dx, y + 0.04, pos[2] + 0.03], [0.03, 0.03], 2);
+    }
+    return f;
+  }
+
+  /** Form 3 — the Hour: very tall and thin, a cracked clock for a face, furnace cracks glowing inside it. */
+  private buildHour() {
+    const f = this.newForm();
+    for (let i = 0; i < 30; i++) f.puff(Math.random() * TAU, 0.12 + Math.random() * 0.16, 0.4 + Math.random() * 2.3, 0.55 + Math.random() * 0.35);
+    for (let i = 0; i < 14; i++) f.puff(Math.random() * TAU, 0.25 + Math.random() * 0.45, 0.05 + Math.random() * 0.7, 0.5 + Math.random() * 0.3);
+    for (let i = 0; i < 4; i++) f.puff(Math.random() * TAU, 0.3, 2.5 + Math.random() * 0.1, 0.45);
+    for (const side of [-1, 1]) {
+      for (let k = 0; k < 10; k++) f.puff(side > 0 ? 0 : Math.PI, 0.3 + k * 0.03, 2.4 - k * 0.24, 0.32, 0.03);
+    }
+    f.sprite(this.clockMaterial, [0, 2.95, 0.12], [0.62, 0.62], 1);
+    f.sprite(this.eyeMaterial, [0, 2.95, 0.16], [0.045, 0.045], 2);
+    for (let i = 0; i < 10; i++) f.sprite(this.eyeMaterial, [(Math.random() - 0.5) * 0.2, 0.6 + Math.random() * 1.8, 0.12], [0.05, 0.05 + Math.random() * 0.08], 2);
+    return f;
+  }
+
+  private get puffs(): Puff[] {
+    return this.forms[this.formIndex].puffs;
+  }
+
+  private setForm(index: number): void {
+    this.forms[this.formIndex].group.visible = false;
+    this.formIndex = index % this.forms.length;
+    this.forms[this.formIndex].group.visible = true;
   }
 
   get config(): PhaseConfig {
@@ -224,6 +293,7 @@ export class Chronophage {
     this.smoke.opacity = 1;
     this.eyeMaterial.opacity = 0.95;
     this.faceMaterial.opacity = 0.55;
+    this.clockMaterial.opacity = 0.6;
     this.haloMaterial.opacity = 0.15;
   }
 
@@ -247,7 +317,13 @@ export class Chronophage {
     if (inView && !this.wasInView && this.glimpseCooldown <= 0 && this.mode !== 'caught') {
       this.flash = 1;
       this.glimpseCooldown = GLIMPSE_COOLDOWN;
+      this.sightings++;
+      this.morphPending = true;
       this.game.events.emit('glimpse');
+    }
+    if (!inView && this.wasInView && this.morphPending) {
+      this.morphPending = false;
+      this.setForm(this.sightings % this.forms.length); // 1st sighting: Wraith, 2nd: Thirty-One, 3rd: Hour, 4th: Wraith…
     }
     this.wasInView = inView;
     this.flash = Math.max(0, this.flash - dt * 0.8);
@@ -462,6 +538,7 @@ export class Chronophage {
     // Always a faint ember rim so its shape reads in the dark; much brighter when the light is on it.
     this.haloMaterial.opacity = Math.min(1, (0.36 + 0.35 * this.reveal + 0.45 * this.flash) * flicker);
     this.faceMaterial.opacity = Math.min(0.9, (0.14 + 0.5 * this.reveal + 0.6 * this.flash) * flicker);
+    this.clockMaterial.opacity = Math.min(0.95, (0.22 + 0.5 * this.reveal + 0.6 * this.flash) * flicker);
     this.eyeMaterial.opacity = Math.min(1, Math.max(0.35 + THREE.MathUtils.clamp((8 - this.distance) / 4, 0, 1) * 0.6, this.flash) * blink);
     // Shedding embers and ash as it moves.
     if (Math.random() < dt * (4 + 6 * this.reveal)) {

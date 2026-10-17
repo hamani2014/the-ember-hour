@@ -414,3 +414,55 @@ export function faceTexture(): THREE.CanvasTexture {
   tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
   return tex;
 }
+
+/** A cracked, pale clock dial for a face — hands stopped at 3:17. */
+export function clockFaceTexture(): THREE.CanvasTexture {
+  const tex = canvasTexture(64, 64, 433, (g, r) => {
+    const img = g.createImageData(64, 64);
+    for (let y = 0; y < 64; y++) {
+      for (let x = 0; x < 64; x++) {
+        const d = Math.hypot(x - 31.5, y - 31.5) / 30;
+        const i = (y * 64 + x) * 4;
+        const shade = 170 + (r() - 0.5) * 40 - d * 40;
+        img.data[i] = shade;
+        img.data[i + 1] = shade * 0.95;
+        img.data[i + 2] = shade * 0.85;
+        img.data[i + 3] = d < 1 ? Math.min(1, (1 - d) * 6) * 255 : 0;
+      }
+    }
+    g.putImageData(img, 0, 0);
+    g.strokeStyle = 'rgba(30,20,12,0.9)';
+    g.lineWidth = 2;
+    g.beginPath();
+    g.arc(32, 32, 27, 0, Math.PI * 2);
+    g.stroke();
+    g.fillStyle = 'rgba(20,12,8,0.95)';
+    for (let h = 0; h < 12; h++) {
+      const a = (h / 12) * Math.PI * 2;
+      g.fillRect(32 + Math.sin(a) * 22 - 1, 32 - Math.cos(a) * 22 - 2, 2, 4);
+    }
+    const hand = (angle: number, length: number, width: number) => {
+      g.lineWidth = width;
+      g.lineCap = 'round';
+      g.beginPath();
+      g.moveTo(32, 32);
+      g.lineTo(32 + Math.sin(angle) * length, 32 - Math.cos(angle) * length);
+      g.stroke();
+    };
+    g.strokeStyle = 'rgba(15,8,4,1)';
+    hand(((3 + 17 / 60) / 12) * Math.PI * 2, 13, 3);
+    hand((17 / 60) * Math.PI * 2, 20, 2);
+    g.fillStyle = 'rgba(25,12,6,0.85)'; // cracks
+    for (let k = 0; k < 6; k++) {
+      let x = 32 + (r() - 0.5) * 30;
+      let y = 32 + (r() - 0.5) * 30;
+      for (let s = 0; s < 16; s++) {
+        g.fillRect(Math.floor(x), Math.floor(y), 1, 1);
+        x += (r() - 0.5) * 3;
+        y += (r() - 0.5) * 3;
+      }
+    }
+  });
+  tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
+  return tex;
+}
