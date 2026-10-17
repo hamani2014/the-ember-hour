@@ -3,6 +3,7 @@ import type { Game } from '../core/game';
 import { lambert } from '../core/ps1';
 import { raindropsTexture, signTexture, textures } from '../core/textures';
 import { createFire } from '../systems/fire';
+import { createNote } from '../systems/notes';
 import { box, plane } from './builder';
 
 const RADIO = [
@@ -20,7 +21,7 @@ const RAIN_DROPS = 1400;
  * trunk, the flashlight flickers and dies, strike a match and light the iron torch. Walk past the
  * welcome gate and push open the doors of the Municipal Archive → Act I.
  *
- * Layout: car at the origin facing -Z; road runs to the Archive facade at z = -40.
+ * Layout: car at the origin facing -Z; road runs to the Archive facade at z = -30, its porch lamp lit.
  */
 export function buildPrologue(game: Game): void {
   const { world, tweens, hud, audio, player, torch } = game;
@@ -35,7 +36,11 @@ export function buildPrologue(game: Game): void {
 
   const MOON = 1.1;
   const moon = new THREE.AmbientLight(0x2a3448, MOON);
-  world.add(moon);
+  const sky = new THREE.DirectionalLight(0xc8d4ff, 0);
+  sky.position.set(6, 30, -12);
+  sky.target.position.set(0, 0, -25);
+  world.add(moon, sky, sky.target);
+  const FOG_FAR = 32;
   game.scene.background = new THREE.Color(0x05060a);
   game.scene.fog = new THREE.Fog(0x0a0c12, 2, 32);
   audio.setAmbience('rain', 0.45);
@@ -59,21 +64,43 @@ export function buildPrologue(game: Game): void {
     game.collision.add(new THREE.Box3(new THREE.Vector3(x - 0.3, 0, z - 0.3), new THREE.Vector3(x + 0.3, 3, z + 0.3)));
   }
   // Keep the player on the road between car and Archive.
-  game.collision.add(new THREE.Box3(new THREE.Vector3(-8, 0, -44), new THREE.Vector3(-7, 3, 9)));
-  game.collision.add(new THREE.Box3(new THREE.Vector3(7, 0, -44), new THREE.Vector3(8, 3, 9)));
+  game.collision.add(new THREE.Box3(new THREE.Vector3(-8, 0, -34), new THREE.Vector3(-7, 3, 9)));
+  game.collision.add(new THREE.Box3(new THREE.Vector3(7, 0, -34), new THREE.Vector3(8, 3, 9)));
   game.collision.add(new THREE.Box3(new THREE.Vector3(-8, 0, 8), new THREE.Vector3(8, 3, 9)));
 
   // --- Welcome sign, gate, and the Archive's front doors ---
-  for (const x of [-1.0, 1.0]) box(game, { pos: [2.9 + x, 1.1, -12], size: [0.1, 2.2, 0.1], material: wood });
-  plane(game, { pos: [2.9, 1.8, -11.94], size: [2.4, 0.95], material: lambert({ map: signTexture(['WELCOME TO ASHEN VALE', 'POPULATION: 0']) }) });
-  for (const x of [-3.6, 3.6]) box(game, { pos: [x, 2.2, -22], size: [0.7, 4.4, 0.7], material: stone });
-  box(game, { pos: [0, 4.6, -22], size: [7.9, 0.5, 0.5], material: iron, collide: false });
-  box(game, { pos: [0, 4, -41], size: [12, 8, 2], material: stone, tile: 2 });
-  plane(game, { pos: [0, 3.4, -39.98], size: [3, 0.7], material: lambert({ map: signTexture(['MUNICIPAL ARCHIVE', 'ASHEN VALE']) }) });
+  for (const x of [-1.0, 1.0]) box(game, { pos: [2.9 + x, 1.1, -9], size: [0.1, 2.2, 0.1], material: wood });
+  plane(game, { pos: [2.9, 1.8, -8.94], size: [2.4, 0.95], material: lambert({ map: signTexture(['WELCOME TO ASHEN VALE', 'POPULATION: 0']) }) });
+  for (const x of [-3.6, 3.6]) box(game, { pos: [x, 2.2, -17], size: [0.7, 4.4, 0.7], material: stone });
+  box(game, { pos: [0, 4.6, -17], size: [7.9, 0.5, 0.5], material: iron, collide: false });
+  // The Archive: a big, blocky civic building, its silhouette shown by lightning.
+  box(game, { pos: [0, 5, -32], size: [16, 10, 3], material: stone, tile: 2 });
+  box(game, { pos: [0, 10.4, -32], size: [17, 0.8, 3.6], material: stone, collide: false });
+  for (const x of [-2.4, 2.4]) box(game, { pos: [x, 2, -30.2], size: [0.5, 4, 0.5], material: stone });
+  box(game, { pos: [0, 4.2, -30.2], size: [5.6, 0.4, 0.8], material: stone, collide: false });
+  plane(game, { pos: [0, 3.4, -30.48], size: [3, 0.7], material: lambert({ map: signTexture(['MUNICIPAL ARCHIVE', 'ASHEN VALE']) }) });
   const doors = new THREE.Group();
-  for (const x of [-0.62, 0.62]) box(game, { pos: [x, 1.3, -39.93], size: [1.2, 2.6, 0.1], material: wood, collide: false, parent: doors });
+  for (const x of [-0.62, 0.62]) box(game, { pos: [x, 1.3, -30.45], size: [1.2, 2.6, 0.1], material: wood, collide: false, parent: doors });
   world.add(doors);
-  for (const x of [-4, 4]) plane(game, { pos: [x, 3.6, -39.98], size: [1, 1.6], material: lambert({ color: 0x08080c }) });
+  for (const x of [-5.5, -3.8, 3.8, 5.5]) for (const y of [3, 6.5]) plane(game, { pos: [x, y, -30.48], size: [1, 1.6], material: lambert({ color: 0x08080c }) });
+  // A lamp still burning over the door — the one warm thing in the dark. Walk toward it.
+  const porchLamp = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.3, 0.22), new THREE.MeshBasicMaterial({ color: 0xffc070, fog: false }));
+  porchLamp.position.set(0, 3.0, -30.3);
+  const porchGlow = new THREE.Sprite(new THREE.SpriteMaterial({ map: textures.smoke(), color: 0xff9a40, transparent: true, opacity: 0.7, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
+  porchGlow.scale.setScalar(1.6);
+  porchGlow.position.copy(porchLamp.position);
+  porchGlow.userData.noHit = true;
+  const porchLight = new THREE.PointLight(0xffa850, 2.5, 9, 1.5);
+  porchLight.position.set(0, 2.8, -29.6);
+  world.add(porchLamp, porchGlow, porchLight);
+  // Roadside reflector posts: they catch the headlights, then the torch, and lead the way.
+  const reflector = new THREE.MeshBasicMaterial({ color: 0xc8501a });
+  for (let z = -3; z > -29; z -= 5) {
+    for (const x of [-3.7, 3.7]) {
+      box(game, { pos: [x, 0.5, z], size: [0.08, 1, 0.08], material: lambert({ color: 0xd0ccc4 }), collide: false });
+      box(game, { pos: [x, 0.85, z + 0.05], size: [0.07, 0.1, 0.02], material: reflector, collide: false });
+    }
+  }
 
   // --- The car: exterior shell + a driver's-eye interior ---
   const car = new THREE.Group();
@@ -87,17 +114,54 @@ export function buildPrologue(game: Game): void {
   part([0, 0.805, 0.4], [1.6, 0.01, 1.7], dark); // cabin floor / seats
   for (const x of [-0.8, 0.8]) for (const z of [-0.62, 0.5, 1.15]) part([x, 1.15, z], [0.06, 0.66, 0.06], paint); // pillars
   part([0, 0.84, -0.5], [1.6, 0.28, 0.35], dark); // dashboard (top at ~0.98, below eye level)
-  part([SEAT.x, 1.1, SEAT.z + 0.42], [0.5, 0.65, 0.12], lambert({ color: 0x2a2420 })); // seat back
+  const leather = lambert({ color: 0x6a4c34 });
+  const plastic = lambert({ color: 0x2c2c30 });
+  for (const x of [SEAT.x, -SEAT.x]) {
+    part([x, 0.88, SEAT.z], [0.5, 0.14, 0.5], leather); // seat cushion
+    part([x, 1.12, SEAT.z + 0.4], [0.5, 0.62, 0.12], leather); // seat back
+    part([x, 1.5, SEAT.z + 0.43], [0.26, 0.18, 0.1], leather); // headrest
+  }
+  part([0, 0.88, -0.05], [0.26, 0.2, 1.0], plastic); // centre console
+  const stick = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.2, 6), iron);
+  stick.position.set(0, 1.06, -0.15);
+  stick.rotation.x = 0.2;
+  const stickKnob = new THREE.Mesh(new THREE.SphereGeometry(0.035, 8, 6), plastic);
+  stickKnob.position.set(0, 1.16, -0.13);
+  car.add(stick, stickKnob);
+  part([0, 0.97, -0.42], [0.62, 0.08, 0.16], plastic); // instrument hood over the gauges
+  part([0.42, 0.86, -0.33], [0.5, 0.02, 0.02], iron); // glovebox seam
+  part([0, 1.37, -0.5], [0.24, 0.07, 0.02], lambert({ color: 0x8a9aa8 })); // rear-view mirror
+  part([0, 1.43, -0.5], [0.02, 0.06, 0.02], plastic);
+  for (const x of [-0.42, 0.42]) part([x, 1.43, -0.42], [0.55, 0.02, 0.24], leather); // sun visors
+  for (const side of [-1, 1]) {
+    part([side * 0.82, 0.92, 0.25], [0.04, 0.4, 1.5], plastic); // door panel
+    part([side * 0.78, 1.0, 0.3], [0.08, 0.05, 0.5], leather); // armrest
+  }
   for (const [x, z] of [[-0.9, -1.4], [0.9, -1.4], [-0.9, 1.4], [0.9, 1.4]]) {
     const wheel = new THREE.Mesh(new THREE.CylinderGeometry(0.33, 0.33, 0.25, 10), dark);
     wheel.rotation.z = Math.PI / 2;
     wheel.position.set(x, 0.33, z);
     car.add(wheel);
   }
-  const wheel = new THREE.Mesh(new THREE.TorusGeometry(0.17, 0.022, 6, 16), dark);
-  wheel.position.set(SEAT.x, 0.95, -0.26);
-  wheel.rotation.x = -1.15;
-  car.add(wheel);
+  // Steering wheel: rim, hub and three spokes, tilted toward the driver on its column.
+  const steering = new THREE.Group();
+  steering.add(new THREE.Mesh(new THREE.TorusGeometry(0.18, 0.024, 6, 18), plastic));
+  const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.04, 10), plastic);
+  hub.rotation.x = Math.PI / 2;
+  steering.add(hub);
+  for (const a of [Math.PI / 2, Math.PI * 1.15, -Math.PI * 0.15]) {
+    const spoke = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.025, 0.02), plastic);
+    spoke.position.set(Math.cos(a) * 0.09, Math.sin(a) * 0.09, 0);
+    spoke.rotation.z = a;
+    steering.add(spoke);
+  }
+  steering.position.set(SEAT.x, 0.98, -0.2);
+  steering.rotation.x = -0.45;
+  car.add(steering);
+  const column = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.035, 0.3, 6), plastic);
+  column.position.set(SEAT.x, 0.9, -0.33);
+  column.rotation.x = 1.1;
+  car.add(column);
 
   const drops = raindropsTexture();
   drops.repeat.set(5, 2);
@@ -111,8 +175,27 @@ export function buildPrologue(game: Game): void {
   pane([-0.81, 1.15, 0.27], [1.75, 0.6], [0, -Math.PI / 2, 0]);
   pane([0.81, 1.15, 0.27], [1.75, 0.6], [0, Math.PI / 2, 0]);
 
-  const gaugeMat = new THREE.MeshBasicMaterial({ color: 0x2f7a4c, fog: false });
-  plane(game, { pos: [SEAT.x, 0.9, -0.32], size: [0.18, 0.05], material: gaugeMat, parent: car });
+  const gaugeMat = new THREE.MeshBasicMaterial({ color: 0x3a9a64, fog: false });
+  for (const dx of [-0.08, 0.08]) {
+    const gauge = new THREE.Mesh(new THREE.CircleGeometry(0.05, 14), gaugeMat);
+    gauge.position.set(SEAT.x + dx, 0.93, -0.335);
+    car.add(gauge);
+    const needle = new THREE.Mesh(new THREE.BoxGeometry(0.004, 0.04, 0.002), new THREE.MeshBasicMaterial({ color: 0xff5020, fog: false }));
+    needle.position.set(SEAT.x + dx, 0.94, -0.333);
+    needle.rotation.z = dx < 0 ? -0.6 : 0.9;
+    car.add(needle);
+  }
+
+  // Dome light: the warm little bulb in the roof. On by default; E toggles it.
+  const domeMat = new THREE.MeshBasicMaterial({ color: 0xfff0d0, fog: false });
+  const dome = new THREE.Group();
+  dome.add(new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.025, 0.08), domeMat), hitArea(0.12));
+  dome.position.set(0, 1.44, 0.35);
+  car.add(dome);
+  const domeLight = new THREE.PointLight(0xffe2b0, 1.1, 2.8, 1.4);
+  domeLight.position.set(0, 1.38, 0.35);
+  car.add(domeLight);
+  let domeOn = true;
   const radio = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.04, 0.02), new THREE.MeshBasicMaterial({ color: 0xc87028, fog: false }));
   radio.position.set(0.12, 0.82, -0.32);
   car.add(radio);
@@ -238,6 +321,19 @@ export function buildPrologue(game: Game): void {
   });
 
   game.interaction.register({
+    object: dome,
+    range: 1.4,
+    prompt: () => (inCar ? (domeOn ? 'Switch off the dome light' : 'Switch on the dome light') : null),
+    interact: () => {
+      domeOn = !domeOn;
+      domeLight.intensity = domeOn ? 1.1 : 0;
+      domeMat.color.set(domeOn ? 0xfff0d0 : 0x2a2a28);
+      audio.play('clank', { attach: dome, volume: 0.25, rate: 3.4, refDistance: 0.5 });
+    },
+  });
+  createNote(game, { doc: 'letter', pos: [-SEAT.x, 0.96, SEAT.z - 0.05], rot: [-Math.PI / 2, 0, 0.4], size: [0.16, 0.11], label: 'the letter on the passenger seat' });
+
+  game.interaction.register({
     object: key,
     range: 1.2,
     prompt: () => (engineDead && inCar ? 'Turn the key' : null),
@@ -263,8 +359,8 @@ export function buildPrologue(game: Game): void {
         player.spawn(-1.55, 0.6, Math.PI);
         game.collision.add(new THREE.Box3(new THREE.Vector3(-0.95, 0, -2.25), new THREE.Vector3(0.95, 1.5, 2.25)));
         hud.fade(0, 1.2);
-        lightning = 1.2;
-        tweens.delay(1.5, () => hud.say('Freezing… and so quiet. There’s an emergency kit in the trunk.', 4));
+        lightning = 2.2;
+        tweens.delay(1.5, () => hud.say('Freezing… and so quiet. There’s an emergency kit in the trunk, round the back.', 4));
       });
     },
   });
@@ -335,7 +431,7 @@ export function buildPrologue(game: Game): void {
         game.embers.emit(front, 30, 0.1, 1.2);
         hud.title('THE EMBER HOUR', 'FIRE · SHADOW · TIME', 5);
       });
-      tweens.delay(6, () => hud.say('Fire. At least fire still works. The Archive — up the road.', 4));
+      tweens.delay(6, () => hud.say('Fire. At least fire still works. There\u2019s a light up the road — a building.', 4.5));
     },
   });
 
@@ -390,12 +486,14 @@ export function buildPrologue(game: Game): void {
     lightning -= dt;
     if (lightning <= 0) {
       flash = 1;
-      lightning = 9 + Math.random() * 10;
+      lightning = 6 + Math.random() * 5;
       tweens.delay(0.9 + Math.random() * 1.2, () => audio.play('thunder', { volume: 0.9, rate: 0.9 + Math.random() * 0.2 }));
     }
     flash = Math.max(0, flash - dt * 4);
     const flicker = flash > 0.5 || (flash > 0.2 && flash < 0.35) ? flash : 0;
-    moon.intensity = MOON + flicker * 6;
+    moon.intensity = MOON + flicker * 5;
+    sky.intensity = flicker * 7;
+    (game.scene.fog as THREE.Fog).far = FOG_FAR + flicker * 70; // the Archive's silhouette leaps out of the dark
   });
 }
 
