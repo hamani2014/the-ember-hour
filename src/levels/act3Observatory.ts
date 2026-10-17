@@ -6,7 +6,10 @@ import { createBurnPoint } from '../systems/burnPoint';
 import { createFire } from '../systems/fire';
 import { createClue, createFuel } from '../systems/pickups';
 import { timeTravel } from '../systems/rift';
+import { createHearth } from '../systems/hearth';
+import { createNote } from '../systems/notes';
 import { box } from './builder';
+import { buildMeridianChamber, MERIDIAN_END } from './meridianChamber';
 
 const BEAM_Y = 1.2; // height the light travels at
 const HALL = 9; // the Orrery Hall spans ±HALL on x and z
@@ -356,8 +359,9 @@ export function buildAct3Observatory(game: Game): void {
   };
 
   // --- The Fracture Point: a corridor dissolving into temporal dust ---
-  const CORRIDOR_START = -15;
-  const CORRIDOR_END = -48;
+  buildMeridianChamber(game);
+  const CORRIDOR_START = MERIDIAN_END;
+  const CORRIDOR_END = MERIDIAN_END - 33;
   box(game, { pos: [0, -0.1, (CORRIDOR_START + CORRIDOR_END) / 2], size: [3, 0.2, CORRIDOR_START - CORRIDOR_END], material: floor, tile: 2 });
   box(game, { pos: [0, 2, CORRIDOR_END - T / 2], size: [3.8, 4, T], material: stone, tile: 2 });
   game.collision.add(new THREE.Box3(new THREE.Vector3(-1.9, -1, CORRIDOR_END), new THREE.Vector3(-1.5, 4, CORRIDOR_START)));
@@ -390,9 +394,9 @@ export function buildAct3Observatory(game: Game): void {
 
   // Masonry dropping into the path ahead during the chase.
   const drops = [
-    { trigger: -20, x: 0.75 },
-    { trigger: -27, x: -0.75 },
-    { trigger: -34, x: 0.75 },
+    { trigger: CORRIDOR_START - 5, x: 0.75 },
+    { trigger: CORRIDOR_START - 12, x: -0.75 },
+    { trigger: CORRIDOR_START - 19, x: 0.75 },
   ].map((d) => ({ ...d, done: false }));
   const dropChunk = (x: number, z: number) => {
     const mesh = new THREE.Mesh(new THREE.BoxGeometry(1.3, 1.1, 0.9), stone);
@@ -417,7 +421,7 @@ export function buildAct3Observatory(game: Game): void {
 
   // --- Mirror of pure, roaring flame at the end ---
   const flameMirror = new THREE.Group();
-  flameMirror.position.set(0, 0, -46.5);
+  flameMirror.position.set(0, 0, CORRIDOR_END + 1.5);
   box(game, { pos: [-1.45, 2, 0], size: [0.3, 4, 0.3], material: brass, collide: false, parent: flameMirror });
   box(game, { pos: [1.45, 2, 0], size: [0.3, 4, 0.3], material: brass, collide: false, parent: flameMirror });
   box(game, { pos: [0, 4.05, 0], size: [3.2, 0.3, 0.3], material: brass, collide: false, parent: flameMirror });
@@ -452,10 +456,13 @@ export function buildAct3Observatory(game: Game): void {
     game.world.add(pile);
     createFuel(game, { object: pile, amount: 30, label: 'charred star charts' });
   };
+  createHearth(game, { position: new THREE.Vector3(-8.1, 0, 2.6), rotY: Math.PI / 2 });
+  createNote(game, { doc: 'plaque', pos: [3, 1.7, 8.98], rot: [0, Math.PI, 0], size: [0.5, 0.35] });
+  createNote(game, { doc: 'researcherLog', pos: [-3.4, 0.02, 3.0], rot: [-Math.PI / 2, 0, 0.6] });
   charts(7.8, 7.8);
   charts(-8.1, -8.2);
   charts(3, 7.6);
-  charts(1.0, -16.5);
+  charts(1.0, CORRIDOR_START - 1.5);
 
   // --- Floating masonry everywhere: gravity has given up ---
   const debris = Array.from({ length: 22 }, (_, i) => {
@@ -463,7 +470,7 @@ export function buildAct3Observatory(game: Game): void {
     const mesh = new THREE.Mesh(new THREE.BoxGeometry(size, size * (0.5 + Math.random()), size), stone);
     if (i < 8) mesh.position.set((Math.random() - 0.5) * 16, 6.5 + Math.random() * 8, (Math.random() - 0.5) * 16);
     else if (i < 15) mesh.position.set((Math.random() < 0.5 ? -1 : 1) * (3 + Math.random() * 8), -5 + Math.random() * 10, -10 - Math.random() * 6);
-    else mesh.position.set((Math.random() < 0.5 ? -1 : 1) * (3 + Math.random() * 6), 3 + Math.random() * 7, -18 - Math.random() * 28);
+    else mesh.position.set((Math.random() < 0.5 ? -1 : 1) * (3 + Math.random() * 6), 3 + Math.random() * 7, CORRIDOR_START - 3 - Math.random() * 28);
     mesh.rotation.set(Math.random() * 3, Math.random() * 3, Math.random() * 3);
     mesh.userData.noHit = true;
     game.world.add(mesh);
@@ -512,7 +519,7 @@ export function buildAct3Observatory(game: Game): void {
     for (const fire of mirrorFires) fire.update(t);
     sheetMaterial.opacity = 0.5 + Math.sin(t * 9) * 0.08 + Math.sin(t * 23) * 0.05;
     mirrorLight.intensity = 6 + Math.sin(t * 11) * 0.8;
-    if (Math.random() < dt * 10) game.embers.emit(new THREE.Vector3((Math.random() - 0.5) * 2.4, Math.random() * 3.5, -46.4), 1, 0.1, 0.6);
+    if (Math.random() < dt * 10) game.embers.emit(new THREE.Vector3((Math.random() - 0.5) * 2.4, Math.random() * 3.5, CORRIDOR_END + 1.6), 1, 0.1, 0.6);
 
     // The chase: stepping off the bridge wakes the full fury of it.
     const feet = game.player.feet;
@@ -541,7 +548,7 @@ export function buildAct3Observatory(game: Game): void {
       }
     }
 
-    if (feet.z < -45.6) {
+    if (feet.z < CORRIDOR_END + 2.4) {
       escaped = true;
       entity.deactivate();
       timeTravel(game, 'act4', 'Through the fire—');

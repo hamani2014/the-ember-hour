@@ -30,7 +30,8 @@ export type SoundKey =
   | 'static'
   | 'thunder'
   | 'match'
-  | 'sting';
+  | 'sting'
+  | 'ticking';
 
 type Gen = (out: Float32Array, sr: number, rand: () => number) => void;
 
@@ -604,6 +605,29 @@ const sting: Gen = (out, sr, rand) => {
   }
 };
 
+/** Many clocks ticking out of step, deep in the dark. */
+const ticking: Gen = (out, sr, rand) => {
+  const body = new Biquad(sr).bandpass(2200, 6);
+  const low = new Biquad(sr).bandpass(700, 5);
+  const clocks = [0.5, 0.47, 0.61, 0.38].map((period) => ({ period, next: rand() * period, amp: 0.5 + rand() * 0.5 }));
+  let click = 0;
+  let deep = 0;
+  for (let i = 0; i < out.length; i++) {
+    const t = i / sr;
+    for (const c of clocks) {
+      if (t >= c.next) {
+        click = c.amp;
+        if (rand() < 0.3) deep = c.amp;
+        c.next += c.period * (0.95 + rand() * 0.1);
+      }
+    }
+    click *= Math.exp(-1 / (sr * 0.002));
+    deep *= Math.exp(-1 / (sr * 0.01));
+    const w = noise(rand);
+    out[i] = body.process(w * click) * 3 + low.process(w * deep) * 2;
+  }
+};
+
 /** Build every sound. Keys with several entries are random variations. */
 export function synthesizeAll(ctx: BaseAudioContext): Record<SoundKey, AudioBuffer[]> {
   const variants = (count: number, seconds: (i: number) => number, seed: number, gen: Gen) =>
@@ -636,5 +660,6 @@ export function synthesizeAll(ctx: BaseAudioContext): Record<SoundKey, AudioBuff
     thunder: [render(ctx, 4.5, 25, thunder)],
     match: [render(ctx, 0.7, 26, match)],
     sting: [render(ctx, 2.2, 27, sting)],
+    ticking: [render(ctx, 6, 28, ticking, true)],
   };
 }
