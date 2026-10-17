@@ -133,6 +133,10 @@ export class GameAudio {
     events.on('turn', (at) => this.play('clank', { at, volume: 0.45, rate: rand(1.8, 2.2), refDistance: 1.5 }));
     events.on('shatter', (at) => this.play('shatter', { at, volume: 1, refDistance: 3 }));
     events.on('creak', (at) => this.play('creak', { at, volume: 0.9, rate: rand(1.0, 1.3), refDistance: 2 }));
+    events.on('retreat', () => {
+      this.play('gust', { attach: entity.group, volume: 0.7, rate: 0.5, refDistance: 3 });
+      this.play('whisper', { attach: entity.group, offset: new THREE.Vector3(0, 2, 0), volume: 0.8, rate: 0.75, refDistance: 2 });
+    });
     events.on('glimpse', () => this.play('sting', { volume: 0.75, rate: rand(0.95, 1.05) }));
     events.on('draft', () => this.play('gust', { volume: 0.75, rate: rand(0.7, 0.9) }));
     events.on('pickup', () => this.play('rustle', { volume: 0.7 }));
@@ -285,7 +289,7 @@ export class GameAudio {
         rate: rand(0.85, 1.1),
         refDistance: 1.5,
       });
-      this.whisperTimer = lerp(9, 2, near) * rand(0.6, 1.4);
+      this.whisperTimer = entity.held ? rand(1.1, 2.0) : lerp(9, 2, near) * rand(0.6, 1.4);
     }
 
     // Wind tearing at the flame while it's smothering you.

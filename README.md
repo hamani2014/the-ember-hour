@@ -9,7 +9,7 @@ You are Julian Vance. Your car dies outside Ashen Vale, a town with a population
 | Theme | How it plays |
 |---|---|
 | **Fire** | Your torch is your light and your life. It burns fuel: slowly standing still, faster walking, fast sprinting. Every clue must be **burned** to move forward. |
-| **Shadow** | The Chronophage, a blind entity of soot, stalks you by sound. Stand still and it creeps closer; sprint and it hunts you. Torchlight drives it back, but enrages it. If it reaches you, it smothers your flame. |
+| **Shadow** | The Chronophage stalks you from the dark — stand still and it creeps closer, sprint and it hunts you. When it steps out, it only moves while you **look at it**: look away and it freezes where it stands, whispering. Walk away without meeting its gaze and it slinks back into the shadows. Stare, and it reaches you and smothers your flame. It's never the same shape twice. |
 | **Time** | Each act is a different era of the same town: the present, fifty years in the past, a shattered future, and a final ritual that must be finished **before dawn**. |
 
 ## Play

@@ -19,6 +19,7 @@ export interface GameEvents {
   draft: void; // the entity blows a cold draft at the flame
   glimpse: void; // the player turns and catches sight of the entity
   creak: THREE.Vector3; // a door or old wood moving
+  retreat: void; // the entity slinks back into the shadows
 }
 
 type Args<T> = T extends void ? [] : [T];
